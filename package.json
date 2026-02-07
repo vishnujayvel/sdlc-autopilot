@@ -1,0 +1,42 @@
+{
+  "name": "sdlc-autopilot",
+  "version": "1.0.0",
+  "description": "Automated SDLC pipeline that uses AI critics (Advocate + Skeptic) to validate requirements, designs, and implementations",
+  "type": "module",
+  "bin": {
+    "sdlc-autopilot": "dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "templates/",
+    "hooks/",
+    "examples/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "sdlc",
+    "ai",
+    "code-review",
+    "critic",
+    "advocate",
+    "skeptic",
+    "automation",
+    "pipeline",
+    "quality",
+    "validation"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "typescript": "^5.0.0"
+  }
+}
