@@ -15,6 +15,23 @@
 
 ---
 
+## Why This Exists
+
+Most AI coding tools give you a chat window and say "go." You prompt, review, prompt again, review again. You are the orchestrator, the quality gate, and the project manager -- all at once.
+
+SDLC Autopilot removes you from the loop. It is not a smarter chat. It is a **self-driving development pipeline** that:
+
+- **Generates its own specs** if you don't have them -- requirements, design, tasks, all in one pass
+- **Validates before building** -- dual critics (ADVOCATE + SKEPTIC) catch issues before a single line of code is written
+- **Batches work intelligently** -- groups tasks by file to minimize agent overhead (83-87% fewer agents than per-task approaches)
+- **Fixes its own mistakes** -- when the SKEPTIC catches a bug, the Actor fixes it automatically, up to 2 cycles
+- **Survives context loss** -- persists state to disk, resumes after Claude's context window compresses
+- **Scales with Agent Teams** -- 5 parallelization strategies turn sequential work into concurrent execution
+
+The key insight: **the agent that writes the code should never be the one that reviews it.** This is why humans do code reviews. SDLC Autopilot encodes this as architecture -- separate Director, Actor, and Critic agents with separate contexts and opposing incentives.
+
+---
+
 ## 3 Steps to Autopilot
 
 **1. Install cc-sdd** (spec-driven development commands)
