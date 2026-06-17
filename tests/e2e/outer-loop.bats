@@ -26,8 +26,10 @@ setup() {
 - [ ] 1.2 Second task
 - [ ] 2.1 Third task
 EOF
-  # Init git repo for progress detection
-  (cd "$TEST_WORK_DIR" && git init -q && git add -A && git commit -q -m "init")
+  # Init git repo for progress detection (local identity for CI runners without global git config)
+  (cd "$TEST_WORK_DIR" && git init -q && \
+    git -c user.email="pdlc-test@example.com" -c user.name="PDLC Test" add -A && \
+    git -c user.email="pdlc-test@example.com" -c user.name="PDLC Test" commit -q -m "init")
   # Put stub claude first on PATH
   export PATH="${STUB_DIR}:${PATH}"
   export PDLC_HOOKS_DIR="${HOOKS_DIR}"
