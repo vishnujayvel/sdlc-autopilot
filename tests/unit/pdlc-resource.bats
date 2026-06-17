@@ -59,18 +59,21 @@ S
   [[ "$output" == "8000" ]]
 }
 
-@test "pdlc_get_available_memory_mb: fallback to 0 on linux without free (no /proc on this env)" {
+@test "pdlc_get_available_memory_mb: linux without free uses /proc/meminfo or returns 0" {
   local stubdir
   stubdir=$(create_stub_bin)
   cat >"$stubdir/uname" <<'S'
 #!/bin/sh
 echo "Linux"
 S
-  # intentionally no 'free' in stubdir; macOS /proc/meminfo absent -> lib falls to echo 0
+  # No 'free' in stub PATH; lib falls through to /proc/meminfo on Linux CI, else 0
   chmod +x "$stubdir/uname"
   PATH="$stubdir:$PATH" run pdlc_get_available_memory_mb
   [[ "$status" -eq 0 ]]
-  [[ "$output" == "0" ]]
+  [[ "$output" =~ ^[0-9]+$ ]]
+  if [[ ! -r /proc/meminfo ]]; then
+    [[ "$output" == "0" ]]
+  fi
 }
 
 # ──────────────────────────────────────────────────────────
