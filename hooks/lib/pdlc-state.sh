@@ -186,11 +186,14 @@ pdlc_get_mtime() {
     echo ""
     return 0
   fi
-  # macOS uses stat -f %m, Linux uses stat -c %Y
-  if stat -f %m "$file" 2>/dev/null; then
-    return 0
+  # macOS: stat -f %m. Linux/GNU: stat -c %Y (GNU also accepts -f as --format; do not probe -f first on Linux)
+  local os
+  os="$(uname -s 2>/dev/null || echo unknown)"
+  if [[ "$os" == "Darwin" ]]; then
+    stat -f %m "$file" 2>/dev/null || echo ""
+  else
+    stat -c %Y "$file" 2>/dev/null || echo ""
   fi
-  stat -c %Y "$file" 2>/dev/null
 }
 
 # Convert epoch seconds to YYYY-MM-DD date string (cross-platform)
