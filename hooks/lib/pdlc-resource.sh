@@ -40,12 +40,23 @@ set -euo pipefail
 
 RESOURCE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Coerce PDLC_* numeric env to safe integers (non-numeric -> default)
+pdlc_resource_int_or_default() {
+  local val="$1"
+  local default="$2"
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    echo "$val"
+  else
+    echo "$default"
+  fi
+}
+
 # Defaults (override via PDLC_* env)
-PDLC_MIN_FREE_MEM_MB="${PDLC_MIN_FREE_MEM_MB:-2048}"
-PDLC_MAX_TEST_PROCS="${PDLC_MAX_TEST_PROCS:-1}"
+PDLC_MIN_FREE_MEM_MB="$(pdlc_resource_int_or_default "${PDLC_MIN_FREE_MEM_MB:-}" 2048)"
+PDLC_MAX_TEST_PROCS="$(pdlc_resource_int_or_default "${PDLC_MAX_TEST_PROCS:-}" 1)"
 PDLC_TEST_PROC_PATTERN="${PDLC_TEST_PROC_PATTERN:-\\.test$|\\.test |go test|pytest|jest |vitest|mocha |test runner|rspec |cargo test}"
-PDLC_DRAIN_TIMEOUT_S="${PDLC_DRAIN_TIMEOUT_S:-60}"
-PDLC_RESOURCE_CRITICAL_MB="${PDLC_RESOURCE_CRITICAL_MB:-512}"
+PDLC_DRAIN_TIMEOUT_S="$(pdlc_resource_int_or_default "${PDLC_DRAIN_TIMEOUT_S:-}" 60)"
+PDLC_RESOURCE_CRITICAL_MB="$(pdlc_resource_int_or_default "${PDLC_RESOURCE_CRITICAL_MB:-}" 512)"
 
 # Get available memory in MB (free + inactive on mac for headroom; available on linux)
 # Portable: vm_stat (macOS) or free (linux) or /proc/meminfo fallback.
@@ -156,16 +167,31 @@ pdlc_cleanup_test_processes() {
     return 0
   fi
 
+  # Scope kills to current UID to avoid terminating unrelated user/CI processes on shared hosts
+  local uid
+  uid="$(id -u 2>/dev/null || echo "")"
   if [[ "$mode" == "force" ]]; then
-    pkill -9 -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    if [[ -n "$uid" ]]; then
+      pkill -9 -U "$uid" -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    else
+      pkill -9 -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    fi
   else
-    pkill -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    if [[ -n "$uid" ]]; then
+      pkill -U "$uid" -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    else
+      pkill -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+    fi
     sleep 1
     # second chance for stragglers
     local remaining
     remaining=$(pdlc_count_test_processes)
     if [[ "$remaining" -gt 0 ]]; then
-      pkill -9 -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+      if [[ -n "$uid" ]]; then
+        pkill -9 -U "$uid" -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+      else
+        pkill -9 -f "$PDLC_TEST_PROC_PATTERN" 2>/dev/null || true
+      fi
     fi
   fi
 

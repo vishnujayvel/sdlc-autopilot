@@ -265,4 +265,26 @@ S
 
 # Trap integration note: pdlc_cleanup_test_processes (and drain) are called from traps in
 # pdlc-outer-loop.sh (signal cleanup + normal post-actor); always exit 0 so traps never abort.
-# See also: outer-loop resource pre-dispatch "skipped due to resource pressure", critical breaker.
+# See also: outer-loop resource pre-dispatch "SKIPPED due to resource pressure — reviewed artifacts only", critical breaker.
+
+# ──────────────────────────────────────────────────────────
+# pdlc_resource_int_or_default (numeric env coercion)
+# ──────────────────────────────────────────────────────────
+
+@test "pdlc_resource_int_or_default: accepts valid integer" {
+  run pdlc_resource_int_or_default "4096" 2048
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "4096" ]]
+}
+
+@test "pdlc_resource_int_or_default: non-numeric falls back to default" {
+  run pdlc_resource_int_or_default "not-a-number" 2048
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "2048" ]]
+}
+
+@test "pdlc_resource_int_or_default: empty falls back to default" {
+  run pdlc_resource_int_or_default "" 60
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "60" ]]
+}

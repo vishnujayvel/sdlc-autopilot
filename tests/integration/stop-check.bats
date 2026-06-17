@@ -229,11 +229,11 @@ EOF
 
 @test "spec under archive/ dir is skipped (allows exit 0)" {
   local workdir="${TEST_WORK_DIR}/t14"
-  local arch_dir="${workdir}/.claude/specs/archive/old-stale"
+  local arch_dir="${workdir}/.claude/specs/archive"
   mkdir -p "$arch_dir"
+  # One level deep: .claude/specs/archive/spec.json (glob */spec.json); basename archive => skip
   echo '{"active_workflow": "pdlc-autopilot"}' > "${arch_dir}/spec.json"
   printf '%s\n' "- [ ] pending in archive" > "${arch_dir}/tasks.md"
-  # even though fresh mtime, find skips it
 
   run_stop_check "$workdir" PDLC_COUNTER_FILE="${TEST_WORK_DIR}/counter14"
 }

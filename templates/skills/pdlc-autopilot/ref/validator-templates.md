@@ -61,7 +61,7 @@ Task tool (general-purpose):
     ## #53 RESOURCE GOVERNANCE (CRITIC CONSTRAINT — MANDATORY)
     - You MUST review the Actor's test output, logs, reports, and artifacts (provided in prompt or batch context/HANDOFF).
     - NEVER run, suggest, or re-execute any test command (go test, make test, pytest, jest, cargo test, etc).
-    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed Actor artifacts only".
+    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed artifacts only".
     - Re-execution by Critics multiplies processes (root cause of full system OOM crash with 642 zombies).
 
     Report:
@@ -143,7 +143,7 @@ Task tool (general-purpose):
     ## #53 RESOURCE GOVERNANCE (CRITIC CONSTRAINT — MANDATORY)
     - You MUST review the Actor's test output, logs, reports, and artifacts (provided in prompt or batch context/HANDOFF).
     - NEVER run, suggest, or re-execute any test command (go test, make test, pytest, jest, cargo test, etc).
-    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed Actor artifacts only".
+    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed artifacts only".
     - Re-execution by Critics multiplies processes (root cause of full system OOM crash with 642 zombies).
 
     Report:
@@ -166,33 +166,76 @@ Task tool (general-purpose):
 **Sub-critic stubs (3):**
 
 ### SPEC-1 (Spec/Requirements-focused SKEPTIC sub-critic)
+
 ```yaml
 Task tool (general-purpose, parallel under SKEPTIC or Director):
   description: "SKEPTIC SPEC-1 sub-critic: spec alignment + requirements coverage"
   prompt: |
     You are SPEC-1 sub-critic (SKEPTIC decomp). Focus ONLY on requirements.md / spec alignment gaps vs product-context + FR-* coverage.
+
+    ## Project Validation Criteria (SOURCE OF TRUTH)
+    {validation_criteria}
+
+    ## Requirements Document
+    {requirements_doc}
+
+    ## Files to Verify
+    {files_to_verify}
+
+    ## ALL Acceptance Criteria to Check
+    {acceptance_criteria}
+
     Use full SKEPTIC instructions + validation-criteria for spec-specific checks (structure, completeness, traceability, output contracts).
     Report in SKEPTIC format but prefix findings SPEC-1: ...
     Feed consolidated to main SKEPTIC / Final.
 ```
 
 ### ARCH-1 (Architecture / callsite / patterns SKEPTIC sub-critic)
+
 ```yaml
 Task tool (general-purpose, parallel under SKEPTIC or Director):
   description: "SKEPTIC ARCH-1 sub-critic: architecture + callsite completeness"
   prompt: |
     You are ARCH-1 sub-critic (SKEPTIC decomp). Focus ONLY on ARCH-* constraints, callsite completeness (item 9), layer boundaries, state ownership, registration patterns, concurrency/TOCTOU etc from main SKEPTIC checklist.
+
+    ## Project Validation Criteria (SOURCE OF TRUTH)
+    {validation_criteria}
+
+    ## Files to Verify
+    {files_to_verify}
+
+    ## ALL Acceptance Criteria to Check
+    {acceptance_criteria}
+
     Cite file:line + ARCH-N. Report ARCH-1: prefix. Use validation-criteria ARCH section.
     Feed to main SKEPTIC / Final. (See SKILL.md Step 1 ARCH extraction.)
 ```
 
 ### VALIDATION-1 (Test/holdout / resource / final criteria SKEPTIC sub-critic)
+
 ```yaml
 Task tool (general-purpose, parallel under SKEPTIC or Director):
   description: "SKEPTIC VALIDATION-1 sub-critic: test strategy, holdouts, resource, critic-gate compliance"
   prompt: |
     You are VALIDATION-1 sub-critic (SKEPTIC decomp). Focus on test tier/holdout (Phase 0.75), #53 resource governance, CriticGate/SpecGate compliance checks, Final Validator items (drift, docs, etc).
-    Review artifacts only (no re-exec). Prefix VALIDATION-1:. Use sealed holdouts if present.
+
+    ## Project Validation Criteria (SOURCE OF TRUTH)
+    {validation_criteria}
+
+    ## Requirements Document
+    {requirements_doc}
+
+    ## Tasks Document
+    {tasks_doc}
+
+    ## Files to Verify
+    {files_to_verify}
+
+    ## ALL Acceptance Criteria to Check
+    {acceptance_criteria}
+
+    Review artifacts only (no re-exec). On resource pressure, report exactly: "SKIPPED due to resource pressure — reviewed artifacts only".
+    Prefix VALIDATION-1:. Use sealed holdouts if present.
     Feed to main SKEPTIC / Final Validator.
 ```
 
@@ -713,7 +756,7 @@ Task tool (general-purpose):
     7. **Linter/Type-Checker Gate** — After implementing, run the project's linter and
        type-checker (e.g., `npm run lint`, `tsc --noEmit`, `ruff check`). Fix ALL warnings
        and errors before self-review. If no linter is configured, skip this step.
-    8. **Resource Governance (#53)** — Before running heavy tests (e.g. `go test ./...`), be aware outer-loop/Director pre-dispatch guards check memory + test procs. If pressure likely (or prior skip noted), run targeted subset only or capture output and report "partial test run due to resource pressure; full output in artifacts". Always capture + surface test output/logs so Critics can review WITHOUT re-running.
+    8. **Resource Governance (#53)** — Before running heavy tests (e.g. `go test ./...`), be aware outer-loop/Director pre-dispatch guards check memory + test procs. If pressure likely (or prior skip noted), run a targeted subset only or capture output in artifacts; do not spawn unbounded suites. Always capture + surface test output/logs so Critics can review WITHOUT re-running (Critics report "SKIPPED due to resource pressure — reviewed artifacts only" under pressure).
     9. Report summary of what you implemented (include test command outputs verbatim for Critic review of artifacts, per P2 rule).
 
     DO NOT dispatch subagents. Implement directly.
@@ -728,7 +771,7 @@ Every Actor MUST end their work with this structured output:
 ```text
 - **Status:** DONE | BLOCKED | PARTIAL
 - **Files modified:** [list with line counts]
-- **Tests:** [pass count] / [total count] passing (or "skipped due to resource pressure" — full output captured for Critics)
+- **Tests:** [pass count] / [total count] passing (or "SKIPPED due to resource pressure — reviewed artifacts only" — full output captured for Critics)
 - **Lint:** [pass/fail] (ran markdownlint for .md, eslint for .ts)
 - **Blockers:** [none | description]
 - **Resource note:** (optional) any pressure observed or skipped test execution

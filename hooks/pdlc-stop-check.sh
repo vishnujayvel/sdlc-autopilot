@@ -184,7 +184,7 @@ get_spec_last_active_epoch() {
   if [[ -f "${PDLC_HANDOFF:-.pdlc/state/HANDOFF.md}" ]]; then
     local sd
     sd="$(pdlc_get_field "spec_dir" 2>/dev/null || true)"
-    if [[ -z "$sd" || "$sd" == *"${spec_dir##*/}"* || "$sd" == "$spec_dir" ]]; then
+    if [[ -n "$sd" && ( "$sd" == *"${spec_dir##*/}"* || "$sd" == "$spec_dir" ) ]]; then
       m="$(pdlc_get_mtime "${PDLC_HANDOFF:-.pdlc/state/HANDOFF.md}" 2>/dev/null || true)"
       if [[ -n "$m" ]] && [[ "$m" -gt "$latest" ]]; then
         latest="$m"
@@ -297,7 +297,7 @@ main() {
   fi
 
   # Compute timeline context (always; for both stale and blocking cases)
-  local now last_epoch last_date created_epoch created_date tasks_mtime tasks_date age_days spec_name
+  local now last_epoch last_date created_epoch created_date tasks_mtime tasks_date age_days tasks_age_days spec_name
   now="$(date +%s)"
   last_epoch="$(get_spec_last_active_epoch "$spec_dir")"
   last_date="$(pdlc_epoch_to_date_str "$last_epoch")"
@@ -306,11 +306,12 @@ main() {
   created_date="$(pdlc_epoch_to_date_str "$created_epoch")"
   tasks_mtime="$(pdlc_get_mtime "$tasks_file" 2>/dev/null || true)"
   tasks_date="$(pdlc_epoch_to_date_str "$tasks_mtime")"
+  tasks_age_days="$(get_days_ago_str "$tasks_mtime")"
   spec_name="$(basename "$spec_dir")"
 
   local timeline
   timeline="  Spec created: ${created_date:-unknown} | Last updated: ${last_date:-unknown} (${age_days} days ago)
-  tasks.md last modified: ${tasks_date:-unknown} (${age_days} days ago)"
+  tasks.md last modified: ${tasks_date:-unknown} (${tasks_age_days} days ago)"
 
   # Check staleness — stale specs (or archived etc) warn but allow exit (fresh = block)
   if is_spec_stale "$spec_dir" "$STALE_DAYS"; then

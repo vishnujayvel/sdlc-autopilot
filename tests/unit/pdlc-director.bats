@@ -120,14 +120,14 @@ session_count: 0" ""
   echo "$output" | grep -q "User stories:"
 }
 
-@test "director_build_prompt: includes resource governance + skipped due to resource pressure (P1/P2 #53)" {
+@test "director_build_prompt: includes resource governance + canonical #53 skip phrase (P1/P2 #53)" {
   mkdir -p "${PDLC_STATE_DIR}"
   pdlc_write_handoff "total_cost_usd: 0.00
 session_count: 0" ""
   run pdlc_director_build_prompt "${FIXTURES_DIR}/clean" "Implementing"
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "Resource Governance"
-  echo "$output" | grep -q "skipped due to resource pressure"
+  echo "$output" | grep -q "SKIPPED due to resource pressure — reviewed artifacts only"
 }
 
 @test "director_build_prompt: test strategy shows spec metrics" {
@@ -283,4 +283,29 @@ session_count: 8" ""
   [[ "$status" -eq 0 ]]
   # Budget should show 45.00 of 50.00
   echo "$output" | grep -q "45.00"
+}
+
+# ──────────────────────────────────────────────────────────
+# pdlc_director_decide fallbacks (#53 canonical skip phrase)
+# ──────────────────────────────────────────────────────────
+
+@test "director_decide: Implementing fallback includes canonical #53 skip phrase" {
+  PDLC_DIRECTOR_TEST_MODE=1
+  run pdlc_director_decide "${FIXTURES_DIR}/implementing" "Implementing"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "SKIPPED due to resource pressure — reviewed artifacts only"
+}
+
+@test "director_decide: Complete fallback includes canonical #53 skip phrase" {
+  PDLC_DIRECTOR_TEST_MODE=1
+  run pdlc_director_decide "${FIXTURES_DIR}/clean" "Complete"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "SKIPPED due to resource pressure — reviewed artifacts only"
+}
+
+@test "director_decide: unknown state fallback includes canonical #53 skip phrase" {
+  PDLC_DIRECTOR_TEST_MODE=1
+  run pdlc_director_decide "${FIXTURES_DIR}/clean" "Mystery"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "SKIPPED due to resource pressure — reviewed artifacts only"
 }

@@ -486,7 +486,7 @@ Final ADVOCATE/SKEPTIC prompts MUST include this check:
 - Let two teammates modify the same file (T-Mode)
 - Use general-purpose subagents to WRITE spec artifacts (SpecGate violation)
 - Skip Kiro validation skills and substitute custom subagent prompts (SpecGate violation)
-- **Resource violation (#53):** Have Critics re-execute tests (`go test`, pytest, etc) or Actors spawn without pre-check. Critics review OUTPUT/ARTIFACTS only. Report "skipped due to resource pressure" on guard signal. Unbounded test fan-out = kernel panic.
+- **Resource violation (#53):** Have Critics re-execute tests (`go test`, pytest, etc) or Actors spawn without pre-check. Critics review OUTPUT/ARTIFACTS only. Report "SKIPPED due to resource pressure — reviewed artifacts only" on guard signal. Unbounded test fan-out = kernel panic.
 
 **Fix cycles:** Max 2 Critic cycles per batch. If still failing, report to user.
 
@@ -528,7 +528,7 @@ Final ADVOCATE/SKEPTIC prompts MUST include this check:
 | "implement the feature" | kiro:spec-tasks | pdlc-autopilot (or /goal + pdlc-goal.md for PDLC rules) |
 | "continue where we left off" | kiro:spec-* | pdlc-autopilot (or /goal + pdlc-goal.md for PDLC rules) |
 
-**Host /goal preference (per loop-simplification-v4 Phase 2/3):** For new PDLC work, prefer host /goal with pdlc-goal.md template (provides classification, P0/P1, SpecGate, delegation to /loop or PDLC outer reference; injects PDLC special: skeptic, dual-critic, batching, lifecycle, gates, persistence). SKILL.md slimmed; generic orchestration removed (see pdlc-goal.md + delegation notes). Use pdlc-autopilot skill for Claude hosts or equivalent adapters.
+**Host /goal preference (per loop-simplification-v4 Phase 3/4/5):** For new PDLC work, prefer host /goal with pdlc-goal.md template (provides classification, P0/P1, SpecGate, delegation to /loop or PDLC outer reference; injects PDLC special: skeptic, dual-critic, batching, lifecycle, gates, persistence). SKILL.md slimmed; generic orchestration removed (see pdlc-goal.md + delegation notes). Use pdlc-autopilot skill for Claude hosts or equivalent adapters.
 
 **When IS it OK to use Kiro skills directly?**
 - User explicitly says "just generate requirements" (no full SDLC)

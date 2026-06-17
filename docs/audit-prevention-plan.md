@@ -94,7 +94,7 @@
 - Ban abstract lifecycle verbs ("advances", "progresses", "continues") in acceptance criteria unless accompanied by a concrete field-change assertion.
 - Add a spec review checklist item: "For each state-mutating acceptance scenario, can I write a BATS assertion that checks the field value? If not, the scenario is underspecified."
 
-**Concrete deliverable**: Update `.specify/extensions/pdlc-spec-review.md` (or create if absent) with the concrete-state-mutation rule. Add to the Spec Kit constitution as a tenet.
+**Concrete deliverable**: Add the concrete-state-mutation rule to `docs/spec-review-checklist.md` (tracked in-repo; Spec Kit `.specify/` is developer-local/gitignored). Mirror into Spec Kit constitution as a tenet when `.specify/` is present locally.
 
 ### 5. Process Gap: Retroactive Compliance Audits
 

@@ -218,7 +218,7 @@ pdlc_date_to_epoch() {
     return 0
   fi
   # Extract first YYYY-MM-DD to be robust with ISO timestamps etc.
-  date_str=$(echo "$date_str" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
+  date_str=$(echo "$date_str" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1) || true
   if [[ -z "$date_str" ]]; then
     echo ""
     return 0

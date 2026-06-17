@@ -283,8 +283,9 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
   # --- Director Step 3: Dispatch Actor (with P1 pre-dispatch resource guard) ---
   # Machine proprioception: check memory + existing test procs before claude -p spawn.
   # Prevents the #53 class of failure (unbounded concurrent test fan-out + zombies).
-  # On pressure: report "skipped due to resource pressure", backpressure, do not spawn.
+  # On pressure: SKIPPED due to resource pressure — reviewed artifacts only (no actor/critic/batch advance).
   # (portable logic in pdlc-resource.sh for reuse in future loop drivers)
+  RESOURCE_SKIP_ITERATION=false
   if declare -f pdlc_resource_check &>/dev/null; then
     if ! pdlc_resource_check >/dev/null 2>&1; then
       echo "  RESOURCE GUARD: pre-dispatch check failed (pressure or test procs active)"
@@ -298,10 +299,9 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
       pdlc_set_field "session_count" "${SESSION_COUNT}"
       pdlc_session_save "${SESSION_COUNT}" "${LIFECYCLE_STATE}" \
         "${DIRECTOR_ACTION}|${DIRECTOR_MODE}|${DIRECTOR_RATIONALE}" \
-        "skipped (resource pressure)" \
+        "SKIPPED due to resource pressure — reviewed artifacts only" \
         "skipped-resource"
-      # Jump to circuit/breaker checks below (no actor/critic this iter)
-      # fallthrough to progress + breakers
+      RESOURCE_SKIP_ITERATION=true
     else
       echo "  RESOURCE GUARD: pre-dispatch OK"
       pdlc_set_field "last_resource_status" "ok"
@@ -337,7 +337,7 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
       # P4 drain + P5 post-actor cleanup: wait for test procs to settle before critics
       # (ensures critics review artifacts, not re-trigger; prevents overlap to next batch)
       if declare -f pdlc_drain_test_processes &>/dev/null; then
-        pdlc_drain_test_processes 30 || true
+        pdlc_drain_test_processes "${PDLC_DRAIN_TIMEOUT_S:-60}" || true
       fi
       if declare -f pdlc_cleanup_test_processes &>/dev/null; then
         pdlc_cleanup_test_processes "safe" || true
@@ -370,52 +370,54 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
     echo "  Cost: \$${SESSION_COST} (total: \$${TOTAL_COST})"
   fi
 
-  # --- Director Step 4: Evaluate Critic feedback ---
-  # Note: per P2, critics (in SKILL path or via state) MUST review Actor test *output/artifacts*
-  # (passed in context/HANDOFF), NOT re-execute tests. Resource pressure -> "skipped" report.
-  RETRY_COUNT=$(pdlc_get_field "retry_count")
-  RETRY_COUNT="${RETRY_COUNT:-0}"
-  CRITIC_VERDICT=$(pdlc_director_evaluate_critics "${BATCH:-1}" "${RETRY_COUNT}")
-  echo "  Critic verdict: ${CRITIC_VERDICT}"
+  if [[ "${RESOURCE_SKIP_ITERATION}" != "true" ]]; then
+    # --- Director Step 4: Evaluate Critic feedback ---
+    # Note: per P2, critics (in SKILL path or via state) MUST review Actor test *output/artifacts*
+    # (passed in context/HANDOFF), NOT re-execute tests. Resource pressure -> SKIPPED report.
+    RETRY_COUNT=$(pdlc_get_field "retry_count")
+    RETRY_COUNT="${RETRY_COUNT:-0}"
+    CRITIC_VERDICT=$(pdlc_director_evaluate_critics "${BATCH:-1}" "${RETRY_COUNT}")
+    echo "  Critic verdict: ${CRITIC_VERDICT}"
 
-  if [[ "${CRITIC_VERDICT}" == "escalate" ]]; then
-    pdlc_set_field "phase" "ESCALATED"
-    echo ""
-    echo "ESCALATED — Director cannot resolve Critic findings after ${RETRY_COUNT} retries."
-    echo "  See HANDOFF.md for details."
-    exit 3
-  elif [[ "${CRITIC_VERDICT}" == "retry" ]]; then
-    RETRY_COUNT=$((RETRY_COUNT + 1))
-    pdlc_set_field "retry_count" "${RETRY_COUNT}"
-    echo "  Retrying (attempt ${RETRY_COUNT}/${PDLC_MAX_RETRIES})"
-  else
-    # Accept — reset retry counter
-    pdlc_set_field "retry_count" "0"
-    # Advance to next batch for outer-loop driven execution
-    CURRENT_BATCH=$(pdlc_get_field "batch")
-    CURRENT_BATCH="${CURRENT_BATCH:-1}"
-    pdlc_set_field "batch" "$((CURRENT_BATCH + 1))"
-    # If review was accepted for a Complete spec, mark as DONE
-    if [[ "${DIRECTOR_ACTION}" == "review" && "${LIFECYCLE_STATE}" == "Complete" ]]; then
-      pdlc_set_field "phase" "DONE"
-      echo "  Review accepted for Complete spec — phase set to DONE"
+    if [[ "${CRITIC_VERDICT}" == "escalate" ]]; then
+      pdlc_set_field "phase" "ESCALATED"
+      echo ""
+      echo "ESCALATED — Director cannot resolve Critic findings after ${RETRY_COUNT} retries."
+      echo "  See HANDOFF.md for details."
+      exit 3
+    elif [[ "${CRITIC_VERDICT}" == "retry" ]]; then
+      RETRY_COUNT=$((RETRY_COUNT + 1))
+      pdlc_set_field "retry_count" "${RETRY_COUNT}"
+      echo "  Retrying (attempt ${RETRY_COUNT}/${PDLC_MAX_RETRIES})"
+    else
+      # Accept — reset retry counter
+      pdlc_set_field "retry_count" "0"
+      # Advance to next batch for outer-loop driven execution
+      CURRENT_BATCH=$(pdlc_get_field "batch")
+      CURRENT_BATCH="${CURRENT_BATCH:-1}"
+      pdlc_set_field "batch" "$((CURRENT_BATCH + 1))"
+      # If review was accepted for a Complete spec, mark as DONE
+      if [[ "${DIRECTOR_ACTION}" == "review" && "${LIFECYCLE_STATE}" == "Complete" ]]; then
+        pdlc_set_field "phase" "DONE"
+        echo "  Review accepted for Complete spec — phase set to DONE"
+      fi
     fi
-  fi
 
-  # --- Save session checkpoint (REQ-SP-003) ---
-  # Determine actor result from git diff (changes vs no changes)
-  actor_result="no changes"
-  if [[ "${GIT_AVAILABLE}" == "true" ]]; then
-    diff_stat=$(git diff --stat HEAD 2>/dev/null || echo "")
-    if [[ -n "${diff_stat}" ]]; then
-      files_changed=$(echo "${diff_stat}" | tail -1 | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo "0")
-      actor_result="success (${files_changed} files changed)"
+    # --- Save session checkpoint (REQ-SP-003) ---
+    # Determine actor result from git diff (changes vs no changes)
+    actor_result="no changes"
+    if [[ "${GIT_AVAILABLE}" == "true" ]]; then
+      diff_stat=$(git diff --stat HEAD 2>/dev/null || echo "")
+      if [[ -n "${diff_stat}" ]]; then
+        files_changed=$(echo "${diff_stat}" | tail -1 | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo "0")
+        actor_result="success (${files_changed} files changed)"
+      fi
     fi
+    pdlc_session_save "${SESSION_COUNT}" "${LIFECYCLE_STATE}" \
+      "${DIRECTOR_ACTION}|${DIRECTOR_MODE}|${DIRECTOR_RATIONALE}" \
+      "${actor_result}" \
+      "${CRITIC_VERDICT}"
   fi
-  pdlc_session_save "${SESSION_COUNT}" "${LIFECYCLE_STATE}" \
-    "${DIRECTOR_ACTION}|${DIRECTOR_MODE}|${DIRECTOR_RATIONALE}" \
-    "${actor_result}" \
-    "${CRITIC_VERDICT}"
 
   # --- Circuit breaker: max cost ---
   if (( $(echo "${TOTAL_COST} > ${MAX_COST_USD}" | bc -l 2>/dev/null || echo 0) )); then
