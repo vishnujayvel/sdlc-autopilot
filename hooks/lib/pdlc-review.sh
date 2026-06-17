@@ -5,6 +5,11 @@
 # into a structured markdown summary suitable for PR descriptions.
 # Read-only Observer: reports findings, never blocks.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_review_summary
+#   (used after quality/critics in outer for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-review.sh"
 # Depends on: pdlc-quality.sh
 

@@ -5,6 +5,11 @@
 # Persists Director dispatch decisions, quality gate results, and iteration
 # state to the HANDOFF.md body section.
 #
+# Host adapter / Ralph driver reuse:
+# Source with pdlc-state; use to checkpoint before/after subagent dispatch in host outer loop. Same HANDOFF format across hosts.
+# Example call sequence: pdlc_director_decide; if ! pdlc_resource_check ...; pdlc_director_evaluate_critics; ...; pdlc_session_save
+# (portable for Ralph/loop/Grok/Cursor; see pdlc-outer-loop.sh + pdlc-goal.md)
+#
 # Two public functions:
 #   pdlc_session_save  — writes checkpoint to HANDOFF.md body (atomic)
 #   pdlc_session_restore — reads checkpoint from HANDOFF.md body

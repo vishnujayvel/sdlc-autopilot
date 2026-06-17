@@ -5,6 +5,11 @@
 # Coherence (LLM-driven) is a future enhancement — see Dimension 3 note below.
 # Read-only Observer: reports findings, never blocks.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_semantic_validate
+#   (used in quality + critics for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-semantic.sh"
 # Depends on: pdlc-state.sh, pdlc-placeholder.sh, pdlc-xref.sh
 

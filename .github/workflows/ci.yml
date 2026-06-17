@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: brew install shellcheck
+      - name: ShellCheck hooks and libs
+        run: |
+          shellcheck --version
+          # -S error: fail only on errors (e.g. local outside function). Warnings like SC1091 are expected for dynamic sources.
+          shellcheck -S error -x hooks/*.sh hooks/lib/*.sh
+
+  bats:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup bats (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install bats-core
+          bats --version
+
+      - name: Setup bats (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bats
+          bats --version || (curl -sSL https://github.com/bats-core/bats-core/releases/download/v1.11.0/bats-core-1.11.0.tar.gz | tar xz && sudo ./bats-core-1.11.0/install.sh /usr/local && bats --version)
+
+      - name: Run unit tests
+        run: bats tests/unit/
+
+      - name: Run integration tests
+        run: bats tests/integration/
+
+      - name: Run e2e outer-loop (stub mode, no live API)
+        run: bats tests/e2e/outer-loop.bats
+        # hooks-live.bats requires PDLC_LIVE_TESTS=1 + API credits; not run in CI

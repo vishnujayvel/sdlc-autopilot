@@ -5,6 +5,11 @@
 # coverage targets, and TDD guidance for Actor sessions.
 # Read-only Observer: reports recommendations, never blocks.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_test_strategy
+#   (used in director + actor dispatch for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-test-strategy.sh"
 # Depends on: (none — standalone analysis)
 

@@ -5,6 +5,11 @@
 # - Every FR-XXX in spec.md should be referenced in tasks.md
 # - Every US-XXX in tasks.md should resolve to a user story in spec.md
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_xref_extract_ids / pdlc_xref_check
+#   (used in critic advocate + semantic for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-xref.sh"
 # Depends on: pdlc-state.sh (for pdlc_get_field)
 

@@ -2,6 +2,8 @@
 
 **Why:** Products evolve across sessions. Context rots when decisions evaporate with conversation compaction. "Context is a scarce resource" — use automated freshness validation and repository-as-system-of-record.
 
+**Host note (pdlc-goal.md + Phase 4 portability):** For Grok/Cursor/Ralph hosts, pdlc-goal.md (templates/ref/) is the entry that mandates this context health protocol on every invocation + retrospective at end of paths. See templates/ref/pdlc-goal.md (persistent goal + sub-protocols) and adapters. Portable core (lib/pdlc-freshness.sh) reused by any driver. Updated per loop-simplification-v4 Phase 3: see pdlc-goal.md for host-aligned entry notes.
+
 ---
 
 ## Freshness Protocol

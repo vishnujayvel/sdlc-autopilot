@@ -13,6 +13,16 @@
 #
 # Read-only Observer: reports findings, never blocks. Returns 0 always.
 #
+# Resource note (#53 P2): This lib evaluates statuses written by Actors/Critics.
+# Critics (in SKILL/validator prompts) are constrained to review artifacts only and
+# report "skipped due to resource pressure" — this consensus path supports that.
+# No test execution happens here.
+#
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_critic_advocate / pdlc_critic_skeptic / pdlc_critic_consensus / pdlc_critic_report
+#   (used by director + outer for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-critic.sh"
 # Depends on: pdlc-state.sh, pdlc-xref.sh, pdlc-placeholder.sh
 

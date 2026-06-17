@@ -61,6 +61,30 @@ model {
       technology 'Bash'
     }
 
+    component criticLib 'pdlc-critic.sh' {
+      #quality
+      description 'Dual-perspective validation — ADVOCATE (spec compliance) + SKEPTIC (robustness), consensus (accept / accept-with-caveats / retry / escalate)'
+      technology 'Bash'
+    }
+
+    component sessionLib 'pdlc-session.sh' {
+      #core
+      description 'Session persistence — checkpoints (iteration, lifecycle, director decision, actor/critic results) written to HANDOFF body'
+      technology 'Bash'
+    }
+
+    component testStrategyLib 'pdlc-test-strategy.sh' {
+      #quality
+      description 'Test strategy designer — infrastructure audit, tier matrix, holdout scenarios (sealed from Actors)'
+      technology 'Bash'
+    }
+
+    component reviewLib 'pdlc-review.sh' {
+      #quality
+      description 'Review orchestration helper (used in final validation and PR review cycles)'
+      technology 'Bash'
+    }
+
     // Component dependencies
     directorLib -> stateLib 'reads HANDOFF fields'
     directorLib -> lifecycleLib 'infers lifecycle state'

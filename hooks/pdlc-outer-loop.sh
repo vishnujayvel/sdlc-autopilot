@@ -34,6 +34,13 @@
 #                          future T-Mode parallelism (Phase 5).
 #   PDLC_MAX_RETRIES     — Max retry attempts per batch after Critic rejection (default: 3)
 #
+# Resource governance (bugs-first for #53: prevent zombie test fan-out + OOM):
+#   PDLC_MIN_FREE_MEM_MB     — Pre-dispatch guard: skip if avail mem < MB (default: 2048)
+#   PDLC_MAX_TEST_PROCS      — Serialize/backpressure: pressure if >N test procs (default: 1)
+#   PDLC_TEST_PROC_PATTERN   — pgrep -f regex for test binaries (cross-lang default in lib)
+#   PDLC_DRAIN_TIMEOUT_S     — Max wait for pdlc_drain_test_processes between batches (60)
+#   PDLC_RESOURCE_CRITICAL_MB — Hard circuit if avail < this (default: 512)
+#
 # EXIT CODES
 # ----------
 #   0   — All batches complete (phase == DONE or lifecycle == Archived)
@@ -56,6 +63,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/lib/pdlc-state.sh"
 source "${SCRIPT_DIR}/lib/pdlc-director.sh"
 source "${SCRIPT_DIR}/lib/pdlc-session.sh"
+source "${SCRIPT_DIR}/lib/pdlc-critic.sh"
+source "${SCRIPT_DIR}/lib/pdlc-resource.sh"  # resource governance (P1/P4/P6 for #53)
 
 # --- Configuration ---
 SPEC_DIR="${PDLC_SPEC_DIR:-}"
@@ -118,6 +127,12 @@ cleanup() {
     echo "  Terminating claude session (PID ${CHILD_PID})..."
     kill "${CHILD_PID}" 2>/dev/null || true
     wait "${CHILD_PID}" 2>/dev/null || true
+  fi
+
+  # Resource cleanup (P5 + #53 zombie prevention): safe kill of test procs on interrupt
+  # (portable via pdlc-resource.sh; only patterns in PDLC_TEST_PROC_PATTERN)
+  if declare -f pdlc_cleanup_test_processes &>/dev/null; then
+    pdlc_cleanup_test_processes "safe" || true
   fi
 
   # Save partial state to HANDOFF.md
@@ -231,6 +246,10 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
     echo "  Total sessions: ${SESSION_COUNT}"
     echo "  Total cost: \$${TOTAL_COST}"
     echo "=========================================="
+    # Final resource hygiene (P5)
+    if declare -f pdlc_cleanup_test_processes &>/dev/null; then
+      pdlc_cleanup_test_processes "safe" || true
+    fi
     exit 0
   fi
 
@@ -251,6 +270,15 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
   echo "--- Session ${SESSION_COUNT}/${MAX_SESSIONS} (Lifecycle: ${LIFECYCLE_STATE}, Batch: ${BATCH:-?}) ---"
 
   # --- Director Step 2: Decide what to do and how ---
+  # Resource governance pre-check ( #53 critical fix, portable per plan/OpenSpec )
+  if ! pdlc_resource_check 2>/dev/null; then
+    echo "  RESOURCE GOVERNANCE: pre-dispatch check failed (memory/procs pressure). Skipping this iteration to avoid #53-class crash. Reporting to HANDOFF."
+    pdlc_set_field "last_resource_skip" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    # brief sleep to yield; continue loop for next budget window
+    sleep 5 || true
+    continue
+  fi
+
   DECISION=$(pdlc_director_decide "${SPEC_DIR}" "${LIFECYCLE_STATE}")
   IFS=$'\x1e' read -r DIRECTOR_ACTION DIRECTOR_MODE DIRECTOR_RATIONALE ACTOR_PROMPT <<< "${DECISION}"
 
@@ -261,36 +289,99 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
   pdlc_set_field "director_action" "${DIRECTOR_ACTION}"
   pdlc_set_field "director_mode" "${DIRECTOR_MODE}"
 
-  # --- Director Step 3: Dispatch Actor ---
-  SESSION_OUTPUT=$(mktemp)
+  # --- Director Step 3: Dispatch Actor (with P1 pre-dispatch resource guard) ---
+  # Machine proprioception: check memory + existing test procs before claude -p spawn.
+  # Prevents the #53 class of failure (unbounded concurrent test fan-out + zombies).
+  # On pressure: report "skipped due to resource pressure", backpressure, do not spawn.
+  # (portable logic in pdlc-resource.sh for reuse in future loop drivers)
+  if declare -f pdlc_resource_check &>/dev/null; then
+    if ! pdlc_resource_check >/dev/null 2>&1; then
+      echo "  RESOURCE GUARD: pre-dispatch check failed (pressure or test procs active)"
+      pdlc_set_field "last_resource_status" "pressure:dispatch-skipped"
+      # Report skipped (P1/P2); treat as limited progress to avoid tight spin
+      NO_PROGRESS=$((NO_PROGRESS + 1))
+      # Light backpressure (P3/P4)
+      sleep 3
+      # Still record session for counting/breakers but no heavy spawn
+      pdlc_set_field "total_cost_usd" "${TOTAL_COST}"
+      pdlc_set_field "session_count" "${SESSION_COUNT}"
+      pdlc_session_save "${SESSION_COUNT}" "${LIFECYCLE_STATE}" \
+        "${DIRECTOR_ACTION}|${DIRECTOR_MODE}|${DIRECTOR_RATIONALE}" \
+        "skipped (resource pressure)" \
+        "skipped-resource"
+      # Jump to circuit/breaker checks below (no actor/critic this iter)
+      # fallthrough to progress + breakers
+    else
+      echo "  RESOURCE GUARD: pre-dispatch OK"
+      pdlc_set_field "last_resource_status" "ok"
+      # Normal dispatch path
+      SESSION_OUTPUT=$(mktemp)
 
-  claude -p \
-    --output-format json \
-    --max-turns "${MAX_TURNS}" \
-    --max-budget-usd "${SESSION_BUDGET}" \
-    --allowedTools "${ALLOWED_TOOLS}" \
-    --append-system-prompt "You are a PDLC Actor session. Spec directory: ${SPEC_DIR}. Lifecycle state: ${LIFECYCLE_STATE}." \
-    "${ACTOR_PROMPT}" \
-    > "${SESSION_OUTPUT}" 2>/dev/null &
-  CHILD_PID=$!
-  wait "${CHILD_PID}" || true
-  CHILD_PID=""
-  RESULT=$(cat "${SESSION_OUTPUT}")
-  rm -f "${SESSION_OUTPUT}"
-  SESSION_OUTPUT=""
+      claude -p \
+        --output-format json \
+        --max-turns "${MAX_TURNS}" \
+        --max-budget-usd "${SESSION_BUDGET}" \
+        --allowedTools "${ALLOWED_TOOLS}" \
+        --append-system-prompt "You are a PDLC Actor session. Spec directory: ${SPEC_DIR}. Lifecycle state: ${LIFECYCLE_STATE}." \
+        "${ACTOR_PROMPT}" \
+        > "${SESSION_OUTPUT}" 2>/dev/null &
+      CHILD_PID=$!
+      wait "${CHILD_PID}" || true
+      CHILD_PID=""
+      RESULT=$(cat "${SESSION_OUTPUT}")
+      rm -f "${SESSION_OUTPUT}"
+      SESSION_OUTPUT=""
 
-  # Parse cost from JSON output
-  SESSION_COST=$(echo "${RESULT}" | jq -r '.usage.total_cost_usd // 0' 2>/dev/null || echo "0")
-  [[ -z "${SESSION_COST}" || "${SESSION_COST}" == "null" ]] && SESSION_COST="0"
-  TOTAL_COST=$(echo "${TOTAL_COST} + ${SESSION_COST}" | bc 2>/dev/null || echo "${TOTAL_COST}")
+      # Parse cost from JSON output
+      SESSION_COST=$(echo "${RESULT}" | jq -r '.usage.total_cost_usd // 0' 2>/dev/null || echo "0")
+      [[ -z "${SESSION_COST}" || "${SESSION_COST}" == "null" ]] && SESSION_COST="0"
+      TOTAL_COST=$(echo "${TOTAL_COST} + ${SESSION_COST}" | bc 2>/dev/null || echo "${TOTAL_COST}")
 
-  # Update HANDOFF.md cost tracking
-  pdlc_set_field "total_cost_usd" "${TOTAL_COST}"
-  pdlc_set_field "session_count" "${SESSION_COUNT}"
+      # Update HANDOFF.md cost tracking
+      pdlc_set_field "total_cost_usd" "${TOTAL_COST}"
+      pdlc_set_field "session_count" "${SESSION_COUNT}"
 
-  echo "  Cost: \$${SESSION_COST} (total: \$${TOTAL_COST})"
+      echo "  Cost: \$${SESSION_COST} (total: \$${TOTAL_COST})"
+
+      # P4 drain + P5 post-actor cleanup: wait for test procs to settle before critics
+      # (ensures critics review artifacts, not re-trigger; prevents overlap to next batch)
+      if declare -f pdlc_drain_test_processes &>/dev/null; then
+        pdlc_drain_test_processes 30 || true
+      fi
+      if declare -f pdlc_cleanup_test_processes &>/dev/null; then
+        pdlc_cleanup_test_processes "safe" || true
+      fi
+    fi
+  else
+    # Fallback if lib not sourced (should not happen): original dispatch
+    SESSION_OUTPUT=$(mktemp)
+
+    claude -p \
+      --output-format json \
+      --max-turns "${MAX_TURNS}" \
+      --max-budget-usd "${SESSION_BUDGET}" \
+      --allowedTools "${ALLOWED_TOOLS}" \
+      --append-system-prompt "You are a PDLC Actor session. Spec directory: ${SPEC_DIR}. Lifecycle state: ${LIFECYCLE_STATE}." \
+      "${ACTOR_PROMPT}" \
+      > "${SESSION_OUTPUT}" 2>/dev/null &
+    CHILD_PID=$!
+    wait "${CHILD_PID}" || true
+    CHILD_PID=""
+    RESULT=$(cat "${SESSION_OUTPUT}")
+    rm -f "${SESSION_OUTPUT}"
+    SESSION_OUTPUT=""
+
+    SESSION_COST=$(echo "${RESULT}" | jq -r '.usage.total_cost_usd // 0' 2>/dev/null || echo "0")
+    [[ -z "${SESSION_COST}" || "${SESSION_COST}" == "null" ]] && SESSION_COST="0"
+    TOTAL_COST=$(echo "${TOTAL_COST} + ${SESSION_COST}" | bc 2>/dev/null || echo "${TOTAL_COST}")
+    pdlc_set_field "total_cost_usd" "${TOTAL_COST}"
+    pdlc_set_field "session_count" "${SESSION_COUNT}"
+    echo "  Cost: \$${SESSION_COST} (total: \$${TOTAL_COST})"
+  fi
 
   # --- Director Step 4: Evaluate Critic feedback ---
+  # Note: per P2, critics (in SKILL path or via state) MUST review Actor test *output/artifacts*
+  # (passed in context/HANDOFF), NOT re-execute tests. Resource pressure -> "skipped" report.
   RETRY_COUNT=$(pdlc_get_field "retry_count")
   RETRY_COUNT="${RETRY_COUNT:-0}"
   CRITIC_VERDICT=$(pdlc_director_evaluate_critics "${BATCH:-1}" "${RETRY_COUNT}")
@@ -309,6 +400,10 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
   else
     # Accept — reset retry counter
     pdlc_set_field "retry_count" "0"
+    # Advance to next batch for outer-loop driven execution
+    CURRENT_BATCH=$(pdlc_get_field "batch")
+    CURRENT_BATCH="${CURRENT_BATCH:-1}"
+    pdlc_set_field "batch" "$((CURRENT_BATCH + 1))"
     # If review was accepted for a Complete spec, mark as DONE
     if [[ "${DIRECTOR_ACTION}" == "review" && "${LIFECYCLE_STATE}" == "Complete" ]]; then
       pdlc_set_field "phase" "DONE"
@@ -318,12 +413,10 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
 
   # --- Save session checkpoint (REQ-SP-003) ---
   # Determine actor result from git diff (changes vs no changes)
-  local actor_result="no changes"
+  actor_result="no changes"
   if [[ "${GIT_AVAILABLE}" == "true" ]]; then
-    local diff_stat
     diff_stat=$(git diff --stat HEAD 2>/dev/null || echo "")
     if [[ -n "${diff_stat}" ]]; then
-      local files_changed
       files_changed=$(echo "${diff_stat}" | tail -1 | grep -oE '[0-9]+ file' | grep -oE '[0-9]+' || echo "0")
       actor_result="success (${files_changed} files changed)"
     fi
@@ -340,6 +433,20 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
     echo "  State preserved in ${STATE_FILE}"
     echo "  Resume with: PDLC_SPEC_DIR=${SPEC_DIR} ./hooks/pdlc-outer-loop.sh"
     exit 1
+  fi
+
+  # --- Enhanced circuit breaker: resource awareness (P1/P6 for #53) ---
+  # Critical memory or runaway test procs -> hard stop (autonomous safety)
+  if declare -f pdlc_resource_pressure_critical &>/dev/null; then
+    if pdlc_resource_pressure_critical; then
+      avail=$(pdlc_get_available_memory_mb 2>/dev/null || echo "?")
+      procs=$(pdlc_count_test_processes 2>/dev/null || echo "?")
+      echo ""
+      echo "CIRCUIT BREAKER: Resource critical (avail=${avail}MB, test_procs=${procs})"
+      echo "  State preserved in ${STATE_FILE}"
+      echo "  Resume with: PDLC_SPEC_DIR=${SPEC_DIR} ./hooks/pdlc-outer-loop.sh"
+      exit 1
+    fi
   fi
 
   # --- Progress detection ---
@@ -374,4 +481,8 @@ echo ""
 echo "CIRCUIT BREAKER: Max sessions reached (${MAX_SESSIONS})"
 echo "  State preserved in ${STATE_FILE}"
 echo "  Resume with: PDLC_SPEC_DIR=${SPEC_DIR} ./hooks/pdlc-outer-loop.sh"
+# Final resource hygiene even on breaker
+if declare -f pdlc_cleanup_test_processes &>/dev/null; then
+  pdlc_cleanup_test_processes "safe" || true
+fi
 exit 1

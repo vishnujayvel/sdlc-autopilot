@@ -1,5 +1,7 @@
 # Validator Templates
 
+**See `templates/ref/pdlc-goal.md` for host-aligned entry (Grok/Cursor/Ralph /goal + /loop delegation).** This file supplies the PDLC sub-protocol validator templates (retained verbatim in slim SKILL); generic loop orchestration lives in host. PDLC special (skeptic, dual-critic consensus, SpecGate/CriticGate, resource #53, ARCH-*) preserved 100% for all hosts/drivers. pdlc-goal.md references these + adds persistent goal success criteria + DONE token.
+
 **CRITICAL: Include validation-criteria.md content in EVERY validator prompt!**
 
 ## Substitution Variables
@@ -55,6 +57,12 @@ Task tool (general-purpose):
        - Check: state lives where the architecture says it should
        - Check: imports respect the documented layer/dependency boundaries
        - Check: new code is consistent with established patterns in the codebase
+
+    ## #53 RESOURCE GOVERNANCE (CRITIC CONSTRAINT — MANDATORY)
+    - You MUST review the Actor's test output, logs, reports, and artifacts (provided in prompt or batch context/HANDOFF).
+    - NEVER run, suggest, or re-execute any test command (go test, make test, pytest, jest, cargo test, etc).
+    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed Actor artifacts only".
+    - Re-execution by Critics multiplies processes (root cause of full system OOM crash with 642 zombies).
 
     Report:
     - ✅ PASS: [list criteria met with file:line evidence]
@@ -132,6 +140,12 @@ Task tool (general-purpose):
         skipped). Flag any suppression comments added without justification (e.g., bare
         `// eslint-disable-next-line` or `# type: ignore` without explanation).
 
+    ## #53 RESOURCE GOVERNANCE (CRITIC CONSTRAINT — MANDATORY)
+    - You MUST review the Actor's test output, logs, reports, and artifacts (provided in prompt or batch context/HANDOFF).
+    - NEVER run, suggest, or re-execute any test command (go test, make test, pytest, jest, cargo test, etc).
+    - If Director/outer-loop signals resource pressure (low mem or test procs active), report exactly: "SKIPPED due to resource pressure — reviewed Actor artifacts only".
+    - Re-execution by Critics multiplies processes (root cause of full system OOM crash with 642 zombies).
+
     Report:
     - ✅ PASS: [no gaps found - list verification evidence]
     - ⚠️ PASS WITH WARNINGS: [minor gaps that don't block]
@@ -144,6 +158,45 @@ Task tool (general-purpose):
     - 📋 TENETS VIOLATED: [list tenet IDs with violations]
     - 📋 ARCH-* VIOLATED: [list ARCH-IDs with violation evidence]
 ```
+
+## SKEPTIC Decomposition Hooks (#39 — stub for prompt-gap closure + Phase 3)
+
+**Status (loop-simplification-v4):** Stub present to enable SKEPTIC decomp in host /loop or sub-critic dispatch. Full 3-way (SPEC-1 / ARCH-1 / VALIDATION-1) can be parallel Task subagents under main SKEPTIC (or integrated). Portable via validator-templates; invoked from pdlc-goal.md success path or Final/Critic contexts. No behavior change to existing SKEPTIC (items 1-15 above remain). Enables parallel sub-critics for #39/#23 prompt gaps.
+
+**Sub-critic stubs (3):**
+
+### SPEC-1 (Spec/Requirements-focused SKEPTIC sub-critic)
+```yaml
+Task tool (general-purpose, parallel under SKEPTIC or Director):
+  description: "SKEPTIC SPEC-1 sub-critic: spec alignment + requirements coverage"
+  prompt: |
+    You are SPEC-1 sub-critic (SKEPTIC decomp). Focus ONLY on requirements.md / spec alignment gaps vs product-context + FR-* coverage.
+    Use full SKEPTIC instructions + validation-criteria for spec-specific checks (structure, completeness, traceability, output contracts).
+    Report in SKEPTIC format but prefix findings SPEC-1: ...
+    Feed consolidated to main SKEPTIC / Final.
+```
+
+### ARCH-1 (Architecture / callsite / patterns SKEPTIC sub-critic)
+```yaml
+Task tool (general-purpose, parallel under SKEPTIC or Director):
+  description: "SKEPTIC ARCH-1 sub-critic: architecture + callsite completeness"
+  prompt: |
+    You are ARCH-1 sub-critic (SKEPTIC decomp). Focus ONLY on ARCH-* constraints, callsite completeness (item 9), layer boundaries, state ownership, registration patterns, concurrency/TOCTOU etc from main SKEPTIC checklist.
+    Cite file:line + ARCH-N. Report ARCH-1: prefix. Use validation-criteria ARCH section.
+    Feed to main SKEPTIC / Final. (See SKILL.md Step 1 ARCH extraction.)
+```
+
+### VALIDATION-1 (Test/holdout / resource / final criteria SKEPTIC sub-critic)
+```yaml
+Task tool (general-purpose, parallel under SKEPTIC or Director):
+  description: "SKEPTIC VALIDATION-1 sub-critic: test strategy, holdouts, resource, critic-gate compliance"
+  prompt: |
+    You are VALIDATION-1 sub-critic (SKEPTIC decomp). Focus on test tier/holdout (Phase 0.75), #53 resource governance, CriticGate/SpecGate compliance checks, Final Validator items (drift, docs, etc).
+    Review artifacts only (no re-exec). Prefix VALIDATION-1:. Use sealed holdouts if present.
+    Feed to main SKEPTIC / Final Validator.
+```
+
+**Director usage (stub):** In Phase 0b / per-batch / Final: optionally dispatch the 3 in parallel (in addition to main ADVOCATE/SKEPTIC/Product Skeptic), merge findings into SKEPTIC report. Preserves consensus matrix + gates. See pdlc-goal.md for host entry enabling this.
 
 ---
 
@@ -600,6 +653,11 @@ Task tool (general-purpose):
     34. Verify each required tier has corresponding test files
     35. Check test quality: no assertion-free tests, no count-only assertions, deterministic
 
+    ## #53 RESOURCE GOVERNANCE (CRITIC CONSTRAINT — MANDATORY)
+    - Review Actor-provided test output/artifacts/logs for verification evidence.
+    - NEVER directly re-execute test binaries or full suites to "confirm". Use artifacts.
+    - Under resource pressure: "SKIPPED due to resource pressure — reviewed artifacts only".
+
     Report:
     - ✅ PASS: All requirements verified with evidence
     - ⚠️ PASS WITH WARNINGS: Minor gaps [list with severity]
@@ -655,7 +713,8 @@ Task tool (general-purpose):
     7. **Linter/Type-Checker Gate** — After implementing, run the project's linter and
        type-checker (e.g., `npm run lint`, `tsc --noEmit`, `ruff check`). Fix ALL warnings
        and errors before self-review. If no linter is configured, skip this step.
-    8. Report summary of what you implemented
+    8. **Resource Governance (#53)** — Before running heavy tests (e.g. `go test ./...`), be aware outer-loop/Director pre-dispatch guards check memory + test procs. If pressure likely (or prior skip noted), run targeted subset only or capture output and report "partial test run due to resource pressure; full output in artifacts". Always capture + surface test output/logs so Critics can review WITHOUT re-running.
+    9. Report summary of what you implemented (include test command outputs verbatim for Critic review of artifacts, per P2 rule).
 
     DO NOT dispatch subagents. Implement directly.
 ```
@@ -669,7 +728,21 @@ Every Actor MUST end their work with this structured output:
 ```text
 - **Status:** DONE | BLOCKED | PARTIAL
 - **Files modified:** [list with line counts]
-- **Tests:** [pass count] / [total count] passing
+- **Tests:** [pass count] / [total count] passing (or "skipped due to resource pressure" — full output captured for Critics)
 - **Lint:** [pass/fail] (ran markdownlint for .md, eslint for .ts)
 - **Blockers:** [none | description]
+- **Resource note:** (optional) any pressure observed or skipped test execution
 ```
+Critics will use the test output here + artifacts; they MUST NOT re-execute.
+
+## SKEPTIC Decomposition Hooks (#39)
+**Status:** Stubbed for host parallelization (loop-simplification-v4 Phase 3).
+
+For #39 SKEPTIC decompose: SKEPTIC checklists (Critic SKEPTIC, Requirements SKEPTIC, Tasks SKEPTIC, Final SKEPTIC) support decomposition into 3 sub-critics for parallel dispatch under host /loop or pdlc-outer-loop (Ralph driver):
+- SPEC-1: Requirements/spec structure, traceability, implementability, output contracts (covers Requirements SKEPTIC + parts of Tasks SKEPTIC + Final SKEPTIC FR-* coverage).
+- ARCH-1: Architecture constraints (ARCH-*), callsite completeness, layer/dependency boundaries, state ownership, pattern consistency, concurrency/input validation (core of Critic SKEPTIC items 8-15 + Final SKEPTIC ARCH sections).
+- VALIDATION-1: General validation, holdout scenarios (Phase 0.75), test tier compliance, PDLC/SpecGate/CriticGate compliance, doc freshness, resource governance (cross-cuts Final SKEPTIC 16-35 + Critic #53 rules).
+
+Host /loop MAY invoke these 3 as parallel sub-critics (instead of one SKEPTIC) then aggregate verdicts for consensus. Detailed prompts/checklists above are the source of truth — sub-critics inherit relevant slices. See pdlc-goal.md for host-aligned entry + "see pdlc-goal.md for host-aligned entry" delegation notes. This stub enables prompt-gap closure without changing current monolithic dispatch (backward compat).
+
+See also @ref/product-skeptic.md (runs alongside in Phase 0b).

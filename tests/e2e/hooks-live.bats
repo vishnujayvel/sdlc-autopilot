@@ -14,18 +14,23 @@ load ../helpers/common-setup
 # Build the hooks settings JSON once (used by all tests)
 HOOKS_SETTINGS='{"hooks":{"PreToolUse":[{"matcher":"Task","hooks":[{"type":"command","command":"bash hooks/spec-gate.sh","timeout":10000},{"type":"command","command":"bash hooks/critic-gate.sh","timeout":10000}]}]}}'
 
-setup() {
+setup_file() {
   if [[ "${PDLC_LIVE_TESTS:-}" != "1" ]]; then
     skip "Live tests disabled. Set PDLC_LIVE_TESTS=1 to run."
   fi
   if ! command -v claude &>/dev/null; then
     skip "claude CLI not found in PATH"
   fi
+}
+
+setup() {
   TEST_WORK_DIR="$(mktemp -d)"
 }
 
 teardown() {
-  [[ -n "${TEST_WORK_DIR:-}" ]] && rm -rf "${TEST_WORK_DIR}"
+  if [[ -n "${TEST_WORK_DIR:-}" && -d "${TEST_WORK_DIR}" ]]; then
+    rm -rf "${TEST_WORK_DIR}"
+  fi
 }
 
 # Helper: run claude -p with our hooks and capture JSON output

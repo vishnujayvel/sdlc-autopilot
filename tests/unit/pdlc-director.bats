@@ -5,6 +5,13 @@ load ../helpers/common-setup
 
 FIXTURES_DIR=""
 
+# Note (#53 resource governance, bugs-first): build_prompt + fallbacks (pdlc_director_decide)
+# now embed P2 CRITIC CONSTRAINT ("review Actor's test output/artifacts, NOT re-execute";
+# "skipped on resource pressure") + P1 guard reference. Existing prompt tests cover
+# structure; "skipped due to resource pressure" language asserted via grep in build_prompt tests.
+# See pdlc-resource.sh (new portable lib) + tests/unit/pdlc-resource.bats (memory_mb, count, check+envs, pressure_critical, drain+cleanup safe/force) + outer-loop pre-dispatch/drain/breaker for
+# the machine checks + "skipped due to resource pressure" wiring. Integration notes also in outer-loop.bats.
+
 setup() {
   TEST_WORK_DIR="$(mktemp -d)"
   source "${HOOKS_DIR}/lib/pdlc-director.sh"
@@ -111,6 +118,16 @@ session_count: 0" ""
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "Test Strategy"
   echo "$output" | grep -q "User stories:"
+}
+
+@test "director_build_prompt: includes resource governance + skipped due to resource pressure (P1/P2 #53)" {
+  mkdir -p "${PDLC_STATE_DIR}"
+  pdlc_write_handoff "total_cost_usd: 0.00
+session_count: 0" ""
+  run pdlc_director_build_prompt "${FIXTURES_DIR}/clean" "Implementing"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "Resource Governance"
+  echo "$output" | grep -q "skipped due to resource pressure"
 }
 
 @test "director_build_prompt: test strategy shows spec metrics" {

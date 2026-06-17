@@ -4,6 +4,11 @@
 # Runs rumdl (or markdownlint-cli2 / markdownlint fallback) against spec artifacts.
 # Read-only Observer: reports violations, never blocks operations.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_lint_available / pdlc_lint_check
+#   (used in quality report + critic for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-lint.sh"
 # Depends on: pdlc-state.sh
 

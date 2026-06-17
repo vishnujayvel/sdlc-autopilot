@@ -19,6 +19,8 @@
 
 </div>
 
+**Use host `/goal` + pdlc-goal.md for PDLC entry/rules + adapters (Grok/Cursor at templates/grok/pdlc-grok-adapter.md:3 + cursor/); portable core complete (hooks/lib all 15 with host reuse headers e.g. pdlc-resource.sh:11), resource guards (#53), SKILL slim start (SKILL.md:211,531), #53/#54 landed. Dogfood ex: /goal "build X with full PDLC" using pdlc-goal template.**
+
 ---
 
 ## The Philosophy

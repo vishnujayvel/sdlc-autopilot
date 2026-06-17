@@ -208,71 +208,20 @@ If you find yourself about to ask "Should I proceed?" — STOP. That's the stick
 
 ### Full PDLC Path (default for new features)
 
-```text
-Phase P0: Product Context (MANDATORY — runs if product-context.md missing)
-    → Ask user tier → ask targeted questions → write product-context.md
-    → See @ref/product-context-template.md
+Generic orchestration (Director decide loop, full batch exec pseudocode, generic resume mechanics) is delegated to host `/goal` for entry + host `/loop` (or `pdlc-outer-loop.sh` reference driver) for execution. See `templates/ref/pdlc-goal.md` (host-aligned entry adapter) for classification, P0/P1, SpecGate, delegation notes + PDLC success criteria.
 
-Phase 0a: Auto-generate missing artifacts (MUST invoke Kiro skills — SpecGate)
-    → Check requirements.md, design.md, tasks.md
-    → If MISSING: MUST use Skill tool to call kiro:spec-requirements / kiro:spec-design / kiro:spec-tasks
-    → DO NOT use general-purpose subagents to write these artifacts (SpecGate violation)
-    → Record provenance in progress.md (see SpecGate constraint)
-    → Runtime error: output cc-sdd install instructions, STOP
+**PDLC special preserved** (all rules, matrices, gates, skeptic, batching, persistence, constraints below apply unchanged regardless of host driver; 100% coverage retained):
 
-Phase 0b: Dual-Perspective + Product Skeptic + Kiro Validation (SpecGate)
-    → STEP 1 — Kiro Validation (MUST invoke via Skill tool — SpecGate):
-      → Skill tool: skill="kiro:validate-gap"    → gap analysis (informational, non-blocking)
-      → Skill tool: skill="kiro:validate-design"  → design review (GO/NO-GO, BLOCKING)
-      → If kiro:validate-design returns NO-GO → STOP. Fix design before proceeding.
-    → STEP 2 — Parallel subagent validation (runs AFTER or IN PARALLEL with Kiro):
-      → Requirements: ADVOCATE + SKEPTIC + Product Skeptic (3 parallel subagents)
-      → Product Skeptic: checks alignment with product-context.md (see @ref/product-skeptic.md)
-      → Tasks: ADVOCATE + SKEPTIC (parallel subagents)
-    → Consensus: all PASS + kiro:validate-design GO → proceed
-      → Product Skeptic SCOPE → cut + proceed, KILL → block
-      → kiro:validate-design NO-GO → block (fix design, re-run)
+- P0 product-context mandatory (Phase P0) + P1 Product Skeptic (adversarial 5-lens vs product-context.md)
+- Phase 0a/0b SpecGate: Kiro Skill tool ONLY for artifact gen (requirements/design/tasks) + kiro:validate-*
+- Phase 0b: parallel ADVOCATE + SKEPTIC + Product Skeptic for reqs; ADVOCATE + SKEPTIC for tasks; Kiro validate-design GO required; consensus matrix
+- Phase 0.5/0.75: validation-criteria load + ARCH-* extraction + test strategy (holdouts sealed)
+- Phase 1+: file-group batching (see Batching Strategy); per-batch Actor + dual Critics (CriticGate); max 2 fix cycles
+- Final Validator (dual + SpecGate/CriticGate compliance + drift vs product-context) + retrospective (all paths)
+- Lightweight paths (bug-fix/iteration) for non-full work (see @ref/lightweight-paths.md)
+- PR/P2/P3 opt-in phases as documented in ref/
 
-Phase 0.5: Load validation-criteria.md + Extract Architecture Constraints
-    → Single source of truth for "what does valid mean?"
-    → ALL validators receive this content in their prompts
-    → Survives conversation compaction
-    → NEW: Extract ARCH-* constraints from design.md (see below)
-
-Phase 0.75: Test Strategy Research (NEW — anti-gaming)
-    → Audit project test infrastructure
-    → Define test tier requirements per task
-    → Design holdout scenarios (sealed — not shown to Actors)
-    → Store holdout scenarios in validation-criteria.md for Final Validator only
-    → See @ref/test-strategy.md
-
-Phase 1+: Execute Batches
-    → Group tasks by file → batches
-    → Per batch: Actor implements → Critics review → fix cycles (max 2)
-    → Mark batch complete → next batch
-
-Final: Final Validator (ADVOCATE + SKEPTIC + PDLC compliance + drift check) → Report
-    → Drift check compares implementation against product-context.md (see @ref/context-health.md)
-
-Phase 5: PR Review Cycle (opt-in — runs if repo has CI/reviewers configured)
-    → Create PR → wait for external review → ingest comments
-    → Address critical/major comments → push fixes → re-request review (max 2 cycles)
-    → Classify gaps for retrospective input
-    → See @ref/pr-review-cycle.md
-
-Retrospective: 3 questions → decision log + context review
-    → See @ref/context-health.md retrospective protocol
-
-Phase P2: Document (opt-in — "document this feature")
-    → DevRel Actor generates docs from source code
-    → Docs Critic catches hallucinations
-    → See @ref/docs-phases.md
-
-Phase P3: Demo & Package (opt-in — "launch prep")
-    → Demo Actor creates README, demo scripts, comparison matrix
-    → Director validates by running demo
-    → See @ref/docs-phases.md
-```
+pdlc-goal.md + retained PDLC sections below supply the special behaviors. Use host /goal + pdlc-goal for PDLC rules. Host supplies generic loop.
 
 ### Bug Fix Path (lightweight — ~2 agent calls)
 
@@ -301,6 +250,8 @@ See @ref/lightweight-paths.md for full protocol.
 | Test Strategy | Test Strategy Designer | Task tool (1 subagent) | Produces holdout scenarios |
 | Per-Batch | Critic ADVOCATE + SKEPTIC | Task tool (2 parallel subagents) — **CriticGate** | Yes if BOTH FAIL |
 | Final | Final Validator | Task tool (2 parallel + SpecGate check) | Reports gaps |
+
+**#53 Resource Rule (applies to all Critics + Final + Actor test steps):** Critics MUST NOT run test execution commands. Review the Actor's reported test output, artifacts, and logs from the batch. Under resource pressure (signaled by Director pre-guards in autonomous outer-loop or explicit note), output "SKIPPED due to resource pressure — reviewed artifacts only". This is non-negotiable to prevent machine crash from test process multiplication.
 | PR Review | Review Comment Actors | Task tool (batched by file) — **CriticGate** | Max 2 cycles |
 | P2 Docs | Docs Critic | Task tool (1 subagent) | Opt-in only |
 
@@ -308,164 +259,25 @@ See @ref/lightweight-paths.md for full protocol.
 
 ## Director Protocol
 
-### Step 0: Auto-Generate & Validate Spec (SpecGate Enforcement Point)
+Generic Director loop mechanics (Step 0-4 orchestration, batch dispatch pseudocode, resume from progress.md) delegated to host `/goal` (entry via pdlc-goal.md) + `/loop` execution (pdlc-outer-loop.sh reference). 
 
-**CRITICAL: This skill AUTO-GENERATES missing artifacts using Kiro skills. Do NOT ask user to run Kiro skills manually. Do NOT use general-purpose subagents to write spec artifacts.**
+See `templates/ref/pdlc-goal.md` for PDLC payload (success criteria, P0/P1/SpecGate/delegation). 
 
-```text
-1. Read spec.json → get spec_dir and feature_name
-2. Update spec.json: active_workflow = "pdlc-autopilot"
+**PDLC special preserved** (enforced in all hosts/drivers; detailed in retained sections below + ref/):
+- SpecGate + CriticGate process constraints (verbatim)
+- Validation Subagent Matrix (verbatim)
+- Product Skeptic (P1 + 5 lenses)
+- Per-batch dual-critic (ADVOCATE+SKEPTIC) + consensus + #53 resource
+- ARCH-* extraction, test strategy holdouts, batching by file, session resume protocol
+- Red flags, all constraints, lightweight paths, task integration, examples
 
-3. Phase 0a — Check for required files and AUTO-GENERATE if missing:
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ SpecGate MANDATORY: Use the Skill tool for ALL artifact generation│
-   │                                                                  │
-   │ - requirements.md MISSING → Skill tool: kiro:spec-requirements  │
-   │ - design.md MISSING → Skill tool: kiro:spec-design, args="-y"  │
-   │ - tasks.md MISSING → Skill tool: kiro:spec-tasks, args="-y"    │
-   │                                                                  │
-   │ VIOLATION: Writing these artifacts via Task tool subagent        │
-   │ instead of Kiro Skill tool invocation.                          │
-   └─────────────────────────────────────────────────────────────────┘
-
-4. Phase 0a → 0b GATE: Verify artifact provenance
-   - Each artifact MUST have been generated by a Kiro skill
-   - Record provenance in progress.md (see SpecGate constraint)
-   - If any artifact was manually written → re-generate via Kiro
-
-5. Phase 0b — Kiro Validation (SpecGate MANDATORY):
-   ┌─────────────────────────────────────────────────────────────────┐
-   │ SpecGate MANDATORY: Use the Skill tool for Kiro validation       │
-   │                                                                  │
-   │ - Skill tool: kiro:validate-gap    → informational warnings     │
-   │ - Skill tool: kiro:validate-design → GO/NO-GO (BLOCKING)       │
-   │                                                                  │
-   │ VIOLATION: Skipping these and using only ADVOCATE/SKEPTIC       │
-   │ subagents for gap/design validation.                            │
-   └─────────────────────────────────────────────────────────────────┘
-
-6. Phase 0b — Subagent Validation (runs AFTER or IN PARALLEL with Kiro):
-   - Requirements: ADVOCATE + SKEPTIC + Product Skeptic (3 parallel)
-   - Tasks: ADVOCATE + SKEPTIC (2 parallel)
-
-7. All validations pass → Phase 0.5 (load validation-criteria.md)
-```
-
-**Runtime Error Handling:** If Kiro skill fails:
-
-```text
-⚠️ Kiro commands not found. PDLC Autopilot requires cc-sdd to generate specs.
-Run this in your project directory:  npx cc-sdd@latest --claude
-```
-
-### Step 1: Read & Parse Spec
-
-```text
-1. Read requirements.md, design.md, tasks.md
-2. Read validation-criteria.md (if exists)
-3. Extract: FR-* requirements, acceptance criteria, task→FR-* mapping, file paths, tenets
-4. Store in memory (do NOT re-read during session)
-5. Extract Architecture Constraints from design.md (Phase 0.5):
-   a. Scan design.md for explicit architectural patterns, contracts, and invariants
-      - Look for: "X must be Y", "X are stateless", "X should never Y", layer boundaries,
-        dependency direction rules, state ownership rules, error handling strategies
-   b. Formulate each as an ARCH-* constraint:
-      - ARCH-1: [short name] — [rule from design doc with file:section reference]
-      - Example: "ARCH-1: Stateless producers — Feed producers must not hold state in closures;
-        all inter-feed state flows through cache bus (design.md §Feed Architecture)"
-   c. Also scan: project CLAUDE.md, product-context.md (architecture principles section)
-   d. Write extracted constraints to validation-criteria.md under:
-      ## Architecture Constraints (extracted from design.md)
-      - ARCH-1: ...
-      - ARCH-2: ...
-   e. If no design.md exists or no patterns found → skip (no constraints = no checks)
-   f. **Registration Contract Extraction** — Scan the codebase for registration patterns:
-      - Arrays-of-names (e.g., `const COMMANDS = ['run', 'test', ...]`)
-      - Switch/case dispatchers (e.g., `switch(command) { case 'run': ... }`)
-      - Config enumerations (e.g., JSON objects listing all valid keys)
-      - Health-check or status listings (e.g., `checkAll([db, cache, queue])`)
-      - Plugin/hook registration points (e.g., `registerHook('onSave', ...)`)
-      Formulate each as an ARCH-* constraint with the complete callsite list:
-      - Example: "ARCH-5: Command registration — All commands must appear in: CLI parser
-        (src/cli.ts:20), help text (src/help.ts:5), test fixtures (tests/commands.test.ts:10)"
-      These constraints feed into SKEPTIC's Callsite Completeness check (item 9).
-```
-
-### Step 1.5: Test Strategy Research (Phase 0.75)
-
-```text
-1. Dispatch Test Strategy Designer subagent (see @ref/test-strategy.md)
-2. Receive test strategy: infrastructure audit, tier matrix, holdout scenarios, quality bars
-3. Store holdout scenarios in validation-criteria.md under "Holdout Scenarios (SEALED)"
-   - These are NOT shared with Actors or per-batch Critics
-4. Include test tier requirements in Actor prompts
-5. Include test quality requirements in per-batch Critic prompts
-6. Proceed to Step 2 (batching)
-```
-
-### Step 2: Create Batches
-
-```text
-1. For each task, identify primary file(s)
-2. Group tasks by file
-3. If batch > 5 tasks, split by phase
-4. Mark batches that can run in parallel
-```
-
-### Step 2.5: T-Mode Strategy Selection (if T-Mode active)
-
-See @ref/t-mode-strategies.md for strategy flowchart, diagrams, and teammate templates.
-
-```text
-1. Check env: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-2. If active: analyze batches, present top 2-3 strategies to user
-3. Store choice in spec.json: pdlc_state.t_strategy
-4. This is the ONE place we pause for user input in T-Mode
-```
-
-### Step 3: Execute Batches
-
-```text
-For each batch:
-  0. UPDATE progress.md with "starting Batch X"
-  1. Collect ALL tasks, acceptance criteria, design context
-  2. Check T-Mode → apply strategy OR dispatch single Actor
-  3. Actor returns → UPDATE progress.md
-
-  ┌─────────────────────────────────────────────────────────────────┐
-  │ CriticGate MANDATORY: Critic dispatch after EVERY Actor batch       │
-  │                                                                  │
-  │ 4. Dispatch BOTH Critic ADVOCATE and SKEPTIC (parallel)         │
-  │ 5. Apply consensus rules (both pass / both fail / disagree)     │
-  │ 6. Record critic results in progress.md Batch Status table      │
-  │ 7. ONLY mark batch "DONE+CRITICS" after both critics report     │
-  │                                                                  │
-  │ VIOLATION: Moving to next batch without critic results.          │
-  │ A batch without critics is NOT complete, regardless of Actor     │
-  │ self-review. This applies to code, skills, docs, and config.    │
-  └─────────────────────────────────────────────────────────────────┘
-
-  8. Update phase visualization (progress bar, test count, critic summary)
-
-  IMPORTANT: Keep main context LEAN. Don't echo full agent output.
-  Summarize: "Batch X: done, N tests, critics: PASS"
-
-  Context Hygiene: Offload research to Explore subagents. One focused task per Actor. Don't accumulate research results in the Director's context — let subagents digest and summarize.
-```
-
-### Step 4: Retrospective + Decision Log
-
-```text
-After Final Validator (or after lightweight path validation):
-  1. Run retrospective protocol (3 questions — see @ref/context-health.md)
-  2. Log decisions to {project}/.claude/decision-log.md if applicable
-  3. Update context freshness if reviewed
-  4. Render retrospective summary box (see @ref/phase-viz.md)
-  5. Capture Lessons: If retrospective surfaces a reusable pattern or mistake, write to project's auto-memory (MEMORY.md) or CLAUDE.md
-  6. Render final summary box
-```
+pdlc-goal.md + this SKILL (slim) + validator-templates supply the PDLC rules; host provides generic decide/loop/resume. No duplication of host orchestration here.
 
 ## Prompt Templates
+
+All PDLC validator/actor/critic templates live in @ref/validator-templates.md (and @ref/product-skeptic.md for full 5-lens). 
+
+For host-aligned entry (Grok/Cursor/Ralph /goal): see `templates/ref/pdlc-goal.md` — it references these templates + success criteria + delegation to /loop. Use pdlc-goal.md + validator-templates as the PDLC payload; host loop invokes them as sub-protocols.
 
 - **Actor template:** See @ref/validator-templates.md (Actor section)
 - **Critic ADVOCATE/SKEPTIC:** See @ref/validator-templates.md (Critic section)
@@ -674,6 +486,7 @@ Final ADVOCATE/SKEPTIC prompts MUST include this check:
 - Let two teammates modify the same file (T-Mode)
 - Use general-purpose subagents to WRITE spec artifacts (SpecGate violation)
 - Skip Kiro validation skills and substitute custom subagent prompts (SpecGate violation)
+- **Resource violation (#53):** Have Critics re-execute tests (`go test`, pytest, etc) or Actors spawn without pre-check. Critics review OUTPUT/ARTIFACTS only. Report "skipped due to resource pressure" on guard signal. Unbounded test fan-out = kernel panic.
 
 **Fix cycles:** Max 2 Critic cycles per batch. If still failing, report to user.
 
@@ -697,6 +510,7 @@ Final ADVOCATE/SKEPTIC prompts MUST include this check:
 - `superpowers:verification-before-completion` (Critic verifies)
 
 **PDLC Phases (ref/ files):**
+- `templates/ref/pdlc-goal.md` — Host /goal entry adapter (portable; thin PDLC payload + success criteria + DONE token + delegation to host /loop or pdlc-outer-loop reference). Use for Grok/Cursor/Ralph hosts + all new PDLC work. Classification + P0/P1/SpecGate here; generic loop delegated. See pdlc-goal.md for host-aligned entry.
 - @ref/product-context-template.md — Phase P0: product-context.md generation
 - @ref/product-skeptic.md — Phase P1: adversarial product alignment review
 - @ref/docs-phases.md — Phase P2 (Document) + P3 (Demo & Package)
@@ -710,9 +524,11 @@ Final ADVOCATE/SKEPTIC prompts MUST include this check:
 
 | If user says... | DON'T use... | DO use... |
 |-----------------|--------------|-----------|
-| "SDLC", "go back to spec" | kiro:spec-* directly | pdlc-autopilot |
-| "implement the feature" | kiro:spec-tasks | pdlc-autopilot |
-| "continue where we left off" | kiro:spec-* | pdlc-autopilot |
+| "SDLC", "go back to spec" | kiro:spec-* directly | pdlc-autopilot (or host /goal + pdlc-goal.md for PDLC rules: classif/P0/P1/SpecGate/success) |
+| "implement the feature" | kiro:spec-tasks | pdlc-autopilot (or /goal + pdlc-goal.md for PDLC rules) |
+| "continue where we left off" | kiro:spec-* | pdlc-autopilot (or /goal + pdlc-goal.md for PDLC rules) |
+
+**Host /goal preference (per loop-simplification-v4 Phase 2/3):** For new PDLC work, prefer host /goal with pdlc-goal.md template (provides classification, P0/P1, SpecGate, delegation to /loop or PDLC outer reference; injects PDLC special: skeptic, dual-critic, batching, lifecycle, gates, persistence). SKILL.md slimmed; generic orchestration removed (see pdlc-goal.md + delegation notes). Use pdlc-autopilot skill for Claude hosts or equivalent adapters.
 
 **When IS it OK to use Kiro skills directly?**
 - User explicitly says "just generate requirements" (no full SDLC)
