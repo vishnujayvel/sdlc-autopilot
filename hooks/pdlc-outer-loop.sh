@@ -270,15 +270,6 @@ while [[ "${SESSION_COUNT}" -lt "${MAX_SESSIONS}" ]]; do
   echo "--- Session ${SESSION_COUNT}/${MAX_SESSIONS} (Lifecycle: ${LIFECYCLE_STATE}, Batch: ${BATCH:-?}) ---"
 
   # --- Director Step 2: Decide what to do and how ---
-  # Resource governance pre-check ( #53 critical fix, portable per plan/OpenSpec )
-  if ! pdlc_resource_check 2>/dev/null; then
-    echo "  RESOURCE GOVERNANCE: pre-dispatch check failed (memory/procs pressure). Skipping this iteration to avoid #53-class crash. Reporting to HANDOFF."
-    pdlc_set_field "last_resource_skip" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    # brief sleep to yield; continue loop for next budget window
-    sleep 5 || true
-    continue
-  fi
-
   DECISION=$(pdlc_director_decide "${SPEC_DIR}" "${LIFECYCLE_STATE}")
   IFS=$'\x1e' read -r DIRECTOR_ACTION DIRECTOR_MODE DIRECTOR_RATIONALE ACTOR_PROMPT <<< "${DECISION}"
 
