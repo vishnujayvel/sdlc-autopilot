@@ -9,6 +9,12 @@
 # The shell script is the deterministic skeleton. The Director
 # is the LLM judgment step within each outer loop iteration.
 #
+# Host adapter / Ralph driver reuse (per loop-simplification-v4):
+#   Source this + pdlc-state + pdlc-lifecycle; call pdlc_director_decide / pdlc_director_evaluate_critics / pdlc_director_build_prompt
+#   from host /loop or thin driver (Grok/Cursor adapters). Env-driven (PDLC_*), pure-ish, always return 0 on observer paths.
+#   No LLM dispatch inside lib; host (or outer) owns subagent/skill call. Example sequence: pdlc_lifecycle_infer; pdlc_director_decide; ... ; resource_check; session_save.
+#   See pdlc-outer-loop.sh as reference implementation + templates/ref/pdlc-goal.md + design.md.
+#
 # Sourced by pdlc-outer-loop.sh:
 #   source "$(dirname "$0")/lib/pdlc-director.sh"
 #
@@ -143,6 +149,11 @@ $(pdlc_session_restore 2>/dev/null || echo "No previous session checkpoint")
 - If remaining budget is low (<20%), prefer same-session to avoid spawn overhead
 - If retry_count > 0, include context about what failed and why
 
+## Resource Governance (P1/P2 for #53 — machine proprioception + critic discipline)
+- Pre-dispatch guards (outer-loop) check free memory (vm_stat/free) and active test procs (pgrep).
+- If pressure: Actor/Director MUST report "SKIPPED due to resource pressure — reviewed artifacts only" (do not spawn heavy cmds).
+- CRITIC CONSTRAINT (MANDATORY): Critics MUST review Actor's test output/artifacts (from HANDOFF/progress/logs/diffs), NOT re-execute tests (`go test`, `make test`, pytest, etc). On resource pressure from Director, report SKIPPED. Re-runs multiply memory (root cause of 642 zombies/93GB crash). If verification needed, request Director schedule via Actor only.
+
 ## Required Output
 Respond with ONLY a JSON object (no markdown fencing, no explanation):
 {"action": "<specify|plan|generate-tasks|implement|review|archive>", "mode": "<same-session|spawn>", "rationale": "<brief explanation>", "actor_prompt": "<specific instructions for the Actor>"}
@@ -157,7 +168,8 @@ pdlc_director_parse_response() {
   local raw_output="$1"
 
   # Try to extract JSON from the response
-  local action mode rationale actor_prompt
+  # Initialize to empty — nounset (-u) treats unassigned locals as errors.
+  local action="" mode="" rationale="" actor_prompt=""
 
   if [[ -n "$raw_output" ]] && command -v jq &>/dev/null; then
     # Try parsing as JSON directly — single jq call
@@ -245,16 +257,16 @@ pdlc_director_decide() {
       printf '%s\x1e%s\x1e%s\x1e%s' "generate-tasks" "same-session" "State is Planned — tasks needed" "Generate tasks.md from the plan and spec in ${spec_dir}."
       ;;
     Tasked|Implementing)
-      printf '%s\x1e%s\x1e%s\x1e%s' "implement" "spawn" "State is ${inferred_state} — implementation work" "Implement the next incomplete user story from ${spec_dir}/tasks.md. Follow TDD: write tests first, then implement."
+      printf '%s\x1e%s\x1e%s\x1e%s' "implement" "spawn" "State is ${inferred_state} — implementation work" "Implement the next incomplete user story from ${spec_dir}/tasks.md. Follow TDD. CRITIC CONSTRAINT (MANDATORY): Critics review ONLY your test output/artifacts (logs, reports in context/HANDOFF); NEVER re-execute tests yourself or instruct others to. On resource pressure (Director guard), report exactly 'SKIPPED due to resource pressure — reviewed artifacts only' and do not spawn test processes. Pre-check resources before any heavy test cmd."
       ;;
     Complete)
-      printf '%s\x1e%s\x1e%s\x1e%s' "review" "same-session" "State is Complete — review needed" "Review all completed work in ${spec_dir}. Run full test suite and verify quality."
+      printf '%s\x1e%s\x1e%s\x1e%s' "review" "same-session" "State is Complete — review needed" "Review all completed work in ${spec_dir}. CRITIC CONSTRAINT (MANDATORY): Review Actor-provided test output/artifacts only; do NOT re-run tests. Report 'SKIPPED due to resource pressure — reviewed artifacts only' if Director signals pressure."
       ;;
     Archived)
       printf '%s\x1e%s\x1e%s\x1e%s' "archive" "same-session" "State is Archived — no action needed" "Feature is archived. No further action required."
       ;;
     *)
-      printf '%s\x1e%s\x1e%s\x1e%s' "implement" "same-session" "Unknown state fallback" "Read HANDOFF.md and execute the next batch of work."
+      printf '%s\x1e%s\x1e%s\x1e%s' "implement" "same-session" "Unknown state fallback" "Read HANDOFF.md and execute the next batch of work. CRITIC CONSTRAINT: Critics MUST review Actor test output/artifacts, NOT re-execute tests. Report 'SKIPPED due to resource pressure — reviewed artifacts only' under memory/proc pressure (see outer-loop guards)."
       ;;
   esac
 }

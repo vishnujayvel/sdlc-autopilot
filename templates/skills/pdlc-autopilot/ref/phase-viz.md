@@ -1,5 +1,7 @@
 # Phase Visualization
 
+**See `templates/ref/pdlc-goal.md` for host-aligned entry ( /goal + delegation to /loop; this supplies PDLC viz sub-protocol for full/bug/iter pipelines + retros).** Phase viz templates are retained PDLC special (used in pdlc-goal success + all paths); generic loop viz/execution in host.
+
 Pure markdown/unicode visualization for PDLC progress. No external tools, no Python — just text the Director renders inline.
 
 ---
@@ -168,3 +170,5 @@ Rendered at cycle completion (all paths):
 3. **Unicode box drawing** — `┌─┐│└─┘├┤` for borders (NOT ASCII `+--+`)
 4. **Keep compact** — one pipeline per render, not multiple stacked
 5. **Emoji in markers only** — ✅🔵⬜❌⏭️ for phases, nowhere else in the box
+
+**Host-aligned entry (v4 Phase 3):** Visualization used from pdlc-goal.md + host /goal entry or /loop execution. see pdlc-goal.md for host-aligned entry. PDLC special (phase markers for gates, skeptic, critics, batch progress) preserved.

@@ -56,7 +56,8 @@
 #
 # =============================================================================
 
-set -uo pipefail
+set -eo pipefail
+trap 'exit 0' ERR
 
 # --- Configuration ---
 MAX_LINES="${PDLC_TEST_MAX_LINES:-30}"

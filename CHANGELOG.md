@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (loop-simplification-v4 Phase 3/4/5)
+- pdlc-goal.md (templates/ref/pdlc-goal.md:1) thin host entry; SKILL.md delegation cross-refs + slim; portable core + adapters; resource governance; dogfood under pdlc-goal process. (v1.2 prep note: portable core 15/15 complete)
+
 ### Planned
 - Hooks installer (`npx pdlc-autopilot --hooks`) with `.claude/settings.json` integration
 - Hooks removal (`npx pdlc-autopilot --hooks --remove`)

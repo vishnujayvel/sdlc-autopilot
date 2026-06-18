@@ -5,6 +5,16 @@ load ../helpers/common-setup
 OUTER_LOOP="${HOOKS_DIR}/pdlc-outer-loop.sh"
 STUB_DIR="$(cd "${BATS_TEST_DIRNAME}/../stubs" && pwd)"
 
+# Integration note for #53 resource governance (bugs-first):
+# Pre-dispatch guards (pdlc-resource_check), drain, cleanup, resource circuit breakers
+# and "skipped (resource pressure)" / "skipped due to resource pressure" paths are exercised via
+# pdlc-outer-loop.sh + lib (see: lines 274,298,310,348,440; critical + report to HANDOFF).
+# Stubs do not simulate pgrep/vm_stat pressure, so e2e wiring + "skipped due to resource pressure"
+# paths covered here; portable unit cases in tests/unit/pdlc-resource.bats (all 5 funcs + envs + fallbacks + safe/force).
+# See outer-loop: resource guard before claude -p, drain after actor, critical breaker,
+# cleanup in traps/DONE. Director prompts + SKILL.md + validator-templates embed the
+# P2 "Critics review artifacts, NOT re-execute; report skipped on pressure".
+
 setup() {
   TEST_WORK_DIR="$(mktemp -d)"
   # Create a minimal spec dir with tasks.md
@@ -16,14 +26,23 @@ setup() {
 - [ ] 1.2 Second task
 - [ ] 2.1 Third task
 EOF
-  # Init git repo for progress detection
-  (cd "$TEST_WORK_DIR" && git init -q && git add -A && git commit -q -m "init")
+  # Init git repo for progress detection (local identity for CI runners without global git config)
+  (cd "$TEST_WORK_DIR" && git init -q && \
+    git -c user.email="pdlc-test@example.com" -c user.name="PDLC Test" add -A && \
+    git -c user.email="pdlc-test@example.com" -c user.name="PDLC Test" commit -q -m "init")
   # Put stub claude first on PATH
   export PATH="${STUB_DIR}:${PATH}"
   export PDLC_HOOKS_DIR="${HOOKS_DIR}"
+  # Director uses deterministic fallback; stub claude only simulates Actor dispatch.
+  export PDLC_DIRECTOR_TEST_MODE=1
+  # Isolate from host test runners (parallel bats, IDE test watchers, etc.)
+  export PDLC_MIN_FREE_MEM_MB=0
+  export PDLC_MAX_TEST_PROCS=9999
+  export PDLC_RESOURCE_CRITICAL_MB=0
 }
 
 teardown() {
+  unset PDLC_DIRECTOR_TEST_MODE
   rm -rf "${TEST_WORK_DIR}"
 }
 

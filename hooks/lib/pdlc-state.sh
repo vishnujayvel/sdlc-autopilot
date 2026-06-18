@@ -4,6 +4,12 @@
 #
 # Provides helpers for reading/writing HANDOFF.md with flat YAML frontmatter.
 # All YAML fields are flat (no nesting). Atomic writes via tmp+mv.
+#
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_get_field / pdlc_set_field (for HANDOFF state)
+#   pdlc_count_tasks (for pending work)
+#   (used by director + outer for portable core)
 
 PDLC_STATE_DIR=".pdlc/state"
 PDLC_HANDOFF="${PDLC_STATE_DIR}/HANDOFF.md"
@@ -157,9 +163,11 @@ pdlc_count_tasks() {
   local what="${2:-total}"
   if [[ ! -f "$file" ]]; then echo "0"; return 0; fi
   local total done
-  total=$(grep -c '^\- \[' "$file" 2>/dev/null || echo "0")
+  total=$(grep -c '^\- \[' "$file" 2>/dev/null || true)
+  total="${total:-0}"
   total="${total//[[:space:]]/}"
-  done=$(grep -c '^\- \[[xX]\]' "$file" 2>/dev/null || echo "0")
+  done=$(grep -c '^\- \[[xX]\]' "$file" 2>/dev/null || true)
+  done="${done:-0}"
   done="${done//[[:space:]]/}"
   case "$what" in
     total) echo "$total" ;;
@@ -178,9 +186,60 @@ pdlc_get_mtime() {
     echo ""
     return 0
   fi
-  # macOS uses stat -f %m, Linux uses stat -c %Y
-  if stat -f %m "$file" 2>/dev/null; then
+  # macOS: stat -f %m. Linux/GNU: stat -c %Y (GNU also accepts -f as --format; do not probe -f first on Linux)
+  local os
+  os="$(uname -s 2>/dev/null || echo unknown)"
+  if [[ "$os" == "Darwin" ]]; then
+    stat -f %m "$file" 2>/dev/null || echo ""
+  else
+    stat -c %Y "$file" 2>/dev/null || echo ""
+  fi
+}
+
+# Convert epoch seconds to YYYY-MM-DD date string (cross-platform)
+# Usage: pdlc_epoch_to_date_str <epoch_seconds>
+# Returns date or empty on failure. macOS: date -r ; GNU: date -d @
+pdlc_epoch_to_date_str() {
+  local epoch="$1"
+  if [[ -z "$epoch" ]]; then
+    echo ""
     return 0
   fi
-  stat -c %Y "$file" 2>/dev/null
+  date -r "$epoch" '+%Y-%m-%d' 2>/dev/null || date -d "@$epoch" '+%Y-%m-%d' 2>/dev/null || echo ""
+}
+
+# Convert a date string (YYYY-MM-DD or ISO) to epoch seconds (cross-platform)
+# Usage: pdlc_date_to_epoch <date_str>
+# Extracts first YYYY-MM-DD match; macOS date -j -f ; GNU date -d
+pdlc_date_to_epoch() {
+  local date_str="$1"
+  if [[ -z "$date_str" ]]; then
+    echo ""
+    return 0
+  fi
+  # Extract first YYYY-MM-DD to be robust with ISO timestamps etc.
+  date_str=$(echo "$date_str" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1) || true
+  if [[ -z "$date_str" ]]; then
+    echo ""
+    return 0
+  fi
+  local epoch
+  epoch=$(date -j -f "%Y-%m-%d" "$date_str" +%s 2>/dev/null) || \
+  epoch=$(date -d "$date_str" +%s 2>/dev/null) || true
+  echo "$epoch"
+}
+
+# Get a top-level field from spec.json (portable helper for spec-driven logic)
+# Future core owns spec.json schema (phase, updated_at, created_at, active_workflow, etc.)
+# Usage: pdlc_get_spec_json_field <spec_dir> <field>   e.g. "updated_at" or "phase"
+# Returns value or empty. Uses pdlc_read_json_field (jq).
+pdlc_get_spec_json_field() {
+  local spec_dir="$1"
+  local field="$2"
+  local json_file="${spec_dir}/spec.json"
+  if [[ ! -f "$json_file" ]]; then
+    echo ""
+    return 0
+  fi
+  pdlc_read_json_field "$field" < "$json_file" 2>/dev/null || echo ""
 }

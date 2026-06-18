@@ -11,17 +11,26 @@
 # warns but allows exit instead of blocking — stale specs should not trap
 # Claude in an infinite loop.
 #
+# Portable-friendly: drives decisions primarily from spec.json (phase,
+# updated_at, created_at, active_workflow) so future core owns the state.
+# Supports explicit terminal phases and archive/ layout for lifecycle.
+#
 # HOW IT WORKS
 # ─────────────
-# 1. Locates the active spec directory by reading spec.json files under
-#    .claude/specs/ and checking for active_workflow == "pdlc-autopilot"
-# 2. Reads tasks.md from that spec directory
-# 3. Counts pending tasks (lines matching "- [ ]")
-# 4. Checks staleness: if no file in the spec dir was modified within
-#    PDLC_STALE_DAYS, the spec is considered stale
-# 5. If pending tasks remain AND spec is NOT stale AND we haven't exceeded
-#    the safety limit, blocks the exit by returning non-zero
-# 6. If spec IS stale, warns and allows exit (exit 0)
+# 1. Locates the active spec dir under .claude/specs/ (skips archive/ and
+#    specs with phase=complete|archived in spec.json) by matching
+#    active_workflow == "pdlc-autopilot" (via spec.json)
+# 2. Reads tasks.md from that spec directory; counts pending "- [ ]"
+# 3. Computes last-active using MULTIPLE SIGNALS (max wins, new-design friendly):
+#      - tasks.md mtime, spec.json mtime
+#      - spec.json updated_at / created_at (parsed)
+#      - HANDOFF.md mtime (if references the spec)
+#      - git log last commit on the spec dir (if available)
+# 4. Staleness threshold: PDLC_STALE_DAYS (default 3)
+#    Fresh (< threshold): block on pending (exit 1) unless safety
+#    Stale (>= threshold): warn with timeline context + allow (exit 0)
+# 5. Always includes timeline (dates + "X days ago") in messages.
+# 6. Explicit lifecycle (phase complete/archived or archive/ dir) => skip entirely (allow)
 #
 # INSTALLATION
 # ─────────────
@@ -44,15 +53,16 @@
 #                          Safety valve to prevent infinite loops.
 #   PDLC_COUNTER_FILE   — Path to the continue counter file.
 #                          Default: /tmp/pdlc-stop-counter-$USER
-#   PDLC_STALE_DAYS     — Days since last spec file modification before
-#                          considering a spec stale (default: 5).
-#                          Stale specs warn but do not block exit.
+#   PDLC_STALE_DAYS     — Days since last active signal before
+#                          considering a spec stale (default: 3).
+#                          Stale specs warn (with dates) but do not block exit.
+#                          Fresh specs with pending tasks block exit.
 #
 # EXIT CODES
 # ──────────
 #   0 — Allow stop (all tasks complete, no tasks file, safety limit hit,
-#        or spec is stale)
-#   1 — Block stop (incomplete tasks remain and spec is not stale)
+#        or spec is stale / explicitly complete / archived / under archive/)
+#   1 — Block stop (incomplete tasks remain and spec is fresh)
 #
 # =============================================================================
 
@@ -72,10 +82,12 @@ fi
 # --- Configuration ---
 MAX_CONTINUES="${PDLC_MAX_CONTINUES:-50}"
 COUNTER_FILE="${PDLC_COUNTER_FILE:-/tmp/pdlc-stop-counter-${USER:-unknown}}"
-STALE_DAYS="${PDLC_STALE_DAYS:-5}"
+STALE_DAYS="${PDLC_STALE_DAYS:-3}"
 PROJECT_DIR="${PWD}"
 
 # --- Find active spec directory ---
+# Portable: prefers spec.json fields for active_workflow + phase.
+# Skips archive/ layout and terminal phases (complete/archived) per AC.
 find_active_spec() {
   local specs_dir="${PROJECT_DIR}/.claude/specs"
 
@@ -86,10 +98,26 @@ find_active_spec() {
   for spec_json in "$specs_dir"/*/spec.json; do
     [[ -f "$spec_json" ]] || continue
 
-    # Check if this spec has pdlc-autopilot as active workflow
-    if grep -q '"active_workflow"' "$spec_json" 2>/dev/null &&
-       grep -q '"pdlc-autopilot"' "$spec_json" 2>/dev/null; then
-      dirname "$spec_json"
+    local spec_d
+    spec_d="$(dirname "$spec_json")"
+
+    # Skip archived layout (explicit dir or any nested under archive/)
+    if [[ "$spec_d" == */archive/* || "$(basename "$spec_d")" == "archive" ]]; then
+      continue
+    fi
+
+    # Skip explicit terminal lifecycle in spec.json (portable, future core owned)
+    local phase
+    phase="$(pdlc_get_spec_json_field "$spec_d" "phase")"
+    case "$phase" in
+      complete|archived|Complete|Archived) continue ;;
+    esac
+
+    # Check active_workflow via parsed field (not loose grep)
+    local wf
+    wf="$(pdlc_get_spec_json_field "$spec_d" "active_workflow")"
+    if [[ "$wf" == "pdlc-autopilot" ]]; then
+      echo "$spec_d"
       return 0
     fi
   done
@@ -113,45 +141,120 @@ count_pending_tasks() {
   echo "${count:-0}"
 }
 
-# --- File modification time (cross-platform) ---
-# Delegate to shared pdlc_get_mtime in pdlc-state.sh
-get_mtime() {
-  pdlc_get_mtime "$1"
+# --- Staleness / last-active (multiple signals, portable via spec.json) ---
+# get_spec_last_active_epoch: returns the most recent epoch across signals.
+# Signals (max wins; designed so future spec.json dates can drive):
+#   tasks.md mtime, spec.json mtime, spec.json updated_at/created_at,
+#   HANDOFF mtime (when it references the spec), git log -- %ct on dir.
+get_spec_last_active_epoch() {
+  local spec_dir="$1"
+  local latest=0
+  local m t
+
+  # tasks.md mtime (primary work artifact)
+  m="$(pdlc_get_mtime "${spec_dir}/tasks.md" 2>/dev/null || true)"
+  if [[ -n "$m" ]] && [[ "$m" -gt "$latest" ]]; then
+    latest="$m"
+  fi
+
+  # spec.json mtime
+  m="$(pdlc_get_mtime "${spec_dir}/spec.json" 2>/dev/null || true)"
+  if [[ -n "$m" ]] && [[ "$m" -gt "$latest" ]]; then
+    latest="$m"
+  fi
+
+  # Prefer explicit dates from spec.json (new-design friendly)
+  local ua ca
+  ua="$(pdlc_get_spec_json_field "$spec_dir" "updated_at")"
+  if [[ -n "$ua" ]]; then
+    t="$(pdlc_date_to_epoch "$ua")"
+    if [[ -n "$t" ]] && [[ "$t" -gt "$latest" ]]; then
+      latest="$t"
+    fi
+  fi
+  ca="$(pdlc_get_spec_json_field "$spec_dir" "created_at")"
+  if [[ -n "$ca" ]]; then
+    t="$(pdlc_date_to_epoch "$ca")"
+    if [[ -n "$t" ]] && [[ "$t" -gt "$latest" ]]; then
+      latest="$t"
+    fi
+  fi
+
+  # HANDOFF mtime (cross-session activity) if it seems to reference this spec
+  if [[ -f "${PDLC_HANDOFF:-.pdlc/state/HANDOFF.md}" ]]; then
+    local sd
+    sd="$(pdlc_get_field "spec_dir" 2>/dev/null || true)"
+    if [[ -n "$sd" && ( "$sd" == *"${spec_dir##*/}"* || "$sd" == "$spec_dir" ) ]]; then
+      m="$(pdlc_get_mtime "${PDLC_HANDOFF:-.pdlc/state/HANDOFF.md}" 2>/dev/null || true)"
+      if [[ -n "$m" ]] && [[ "$m" -gt "$latest" ]]; then
+        latest="$m"
+      fi
+    fi
+  fi
+
+  # Git commit time on the spec dir (if repo + history)
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    t="$(git log -1 --format=%ct -- "$spec_dir" 2>/dev/null || true)"
+    if [[ -n "$t" ]] && [[ "$t" -gt "$latest" ]]; then
+      latest="$t"
+    fi
+  fi
+
+  echo "$latest"
 }
 
-# --- Staleness check ---
-# Returns 0 (true) if the spec directory is stale, 1 (false) otherwise.
-# A spec is stale when no file in the directory has been modified within
-# STALE_DAYS days.
+# is_spec_stale: returns 0 (stale) if last active age >= STALE_DAYS, else 1 (fresh).
+# Uses multi-signal last active (improved).
 is_spec_stale() {
   local spec_dir="$1"
   local stale_days="$2"
+  local last
+  last="$(get_spec_last_active_epoch "$spec_dir")"
+  if [[ -z "$last" || "$last" -eq 0 ]]; then
+    return 0  # no signals: treat as stale (safe, allow exit)
+  fi
+
   local now
   now="$(date +%s)"
   local threshold=$(( stale_days * 86400 ))
-  local newest_mtime=0
-
-  # Find the most recently modified file in the spec directory
-  for file in "$spec_dir"/*; do
-    [[ -f "$file" ]] || continue
-    local mtime
-    mtime="$(get_mtime "$file")"
-    if [[ -n "$mtime" ]] && [[ "$mtime" -gt "$newest_mtime" ]]; then
-      newest_mtime="$mtime"
-    fi
-  done
-
-  # If no files found or newest file is older than threshold, spec is stale
-  if [[ "$newest_mtime" -eq 0 ]]; then
-    return 0
-  fi
-
-  local age=$(( now - newest_mtime ))
+  local age=$(( now - last ))
   if [[ "$age" -ge "$threshold" ]]; then
     return 0
   fi
-
   return 1
+}
+
+# --- Timeline helpers for rich messages (dates + X days ago) ---
+get_spec_created_epoch() {
+  local spec_dir="$1"
+  local c
+  c="$(pdlc_get_spec_json_field "$spec_dir" "created_at")"
+  local e
+  e="$(pdlc_date_to_epoch "$c")"
+  if [[ -n "$e" ]]; then
+    echo "$e"
+    return 0
+  fi
+  # fallback to spec.json mtime or tasks mtime
+  e="$(pdlc_get_mtime "${spec_dir}/spec.json" 2>/dev/null || true)"
+  if [[ -n "$e" ]]; then
+    echo "$e"
+    return 0
+  fi
+  e="$(pdlc_get_mtime "${spec_dir}/tasks.md" 2>/dev/null || true)"
+  echo "${e:-0}"
+}
+
+get_days_ago_str() {
+  local epoch="$1"
+  local now
+  now="$(date +%s)"
+  if [[ -z "$epoch" || "$epoch" -eq 0 ]]; then
+    echo "?"
+    return 0
+  fi
+  local d=$(( (now - epoch) / 86400 ))
+  echo "$d"
 }
 
 # --- Safety counter ---
@@ -193,10 +296,28 @@ main() {
     exit 0
   fi
 
-  # Check staleness — stale specs warn but allow exit
+  # Compute timeline context (always; for both stale and blocking cases)
+  local now last_epoch last_date created_epoch created_date tasks_mtime tasks_date age_days tasks_age_days spec_name
+  now="$(date +%s)"
+  last_epoch="$(get_spec_last_active_epoch "$spec_dir")"
+  last_date="$(pdlc_epoch_to_date_str "$last_epoch")"
+  age_days="$(get_days_ago_str "$last_epoch")"
+  created_epoch="$(get_spec_created_epoch "$spec_dir")"
+  created_date="$(pdlc_epoch_to_date_str "$created_epoch")"
+  tasks_mtime="$(pdlc_get_mtime "$tasks_file" 2>/dev/null || true)"
+  tasks_date="$(pdlc_epoch_to_date_str "$tasks_mtime")"
+  tasks_age_days="$(get_days_ago_str "$tasks_mtime")"
+  spec_name="$(basename "$spec_dir")"
+
+  local timeline
+  timeline="  Spec created: ${created_date:-unknown} | Last updated: ${last_date:-unknown} (${age_days} days ago)
+  tasks.md last modified: ${tasks_date:-unknown} (${tasks_age_days} days ago)"
+
+  # Check staleness — stale specs (or archived etc) warn but allow exit (fresh = block)
   if is_spec_stale "$spec_dir" "$STALE_DAYS"; then
-    echo "PDLC Stop Guard: Spec appears stale (no changes in ${STALE_DAYS}+ days). Allowing exit." >&2
-    echo "  ${pending} tasks still pending but spec has not been actively worked on." >&2
+    echo "PDLC Stop Guard: ${pending} tasks still pending in ${spec_name}" >&2
+    echo "${timeline}" >&2
+    echo "  Tip: Archive stale specs with: mv .claude/specs/${spec_name} .claude/specs/archive/" >&2
     reset_counter
     exit 0
   fi
@@ -207,14 +328,16 @@ main() {
 
   if [[ "$counter" -ge "$MAX_CONTINUES" ]]; then
     echo "PDLC Stop Guard: Safety limit reached (${MAX_CONTINUES} continues)." >&2
-    echo "  ${pending} tasks still pending. Allowing exit to prevent infinite loop." >&2
+    echo "  ${pending} tasks still pending in ${spec_name}. Allowing exit to prevent infinite loop." >&2
+    echo "${timeline}" >&2
     reset_counter
     exit 0
   fi
 
-  # Block exit — tasks remain
+  # Block exit — tasks remain AND spec is fresh (within STALE_DAYS)
   increment_counter
-  echo "PDLC Stop Guard: ${pending} tasks still pending in ${tasks_file}" >&2
+  echo "PDLC Stop Guard: ${pending} tasks still pending in ${spec_name}" >&2
+  echo "${timeline}" >&2
   echo "  Continue #$(( counter + 1 ))/${MAX_CONTINUES}. Complete remaining tasks before stopping." >&2
   exit 1
 }

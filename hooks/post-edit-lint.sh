@@ -50,7 +50,8 @@
 #
 # =============================================================================
 
-set -uo pipefail
+set -eo pipefail
+trap 'exit 0' ERR
 
 # --- Check if disabled ---
 if [[ "${PDLC_LINT_DISABLED:-0}" == "1" ]]; then

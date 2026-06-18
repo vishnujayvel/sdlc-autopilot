@@ -6,6 +6,11 @@
 # markers and produces a PASS/WARN/FAIL result.
 # Read-only Observer: reports findings, never blocks.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_skeptic_check_value / pdlc_skeptic_check_feasibility / ... / pdlc_skeptic_report
+#   (P1 skeptic per pdlc-goal; used in quality + director for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-skeptic.sh"
 # Depends on: pdlc-state.sh
 

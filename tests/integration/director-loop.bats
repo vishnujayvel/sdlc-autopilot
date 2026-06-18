@@ -7,11 +7,17 @@ FIXTURES_DIR=""
 
 setup() {
   TEST_WORK_DIR="$(mktemp -d)"
+  export PDLC_DIRECTOR_TEST_MODE=1
   source "${HOOKS_DIR}/lib/pdlc-director.sh"
   PDLC_STATE_DIR="${TEST_WORK_DIR}/.pdlc/state"
   PDLC_HANDOFF="${PDLC_STATE_DIR}/HANDOFF.md"
   PDLC_MARKER="${PDLC_STATE_DIR}/.compact_marker"
   FIXTURES_DIR="${REPO_DIR}/tests/fixtures/spec-lifecycle"
+}
+
+teardown() {
+  unset PDLC_DIRECTOR_TEST_MODE
+  rm -rf "${TEST_WORK_DIR}"
 }
 
 # ──────────────────────────────────────────────────────────

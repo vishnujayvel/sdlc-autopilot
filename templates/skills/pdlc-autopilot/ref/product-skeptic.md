@@ -1,5 +1,7 @@
 # Product Skeptic
 
+**See `templates/ref/pdlc-goal.md` for host-aligned entry ( /goal + pdlc-goal.md for P0/P1 + delegation to host /loop ).** Product Skeptic (P1) is core PDLC special — 5-lens adversarial review preserved verbatim for all hosts (Claude, Grok, Cursor, Ralph). SKILL slim delegates generic orchestration; this + pdlc-goal injects the skeptic behavior.
+
 **What:** Adversarial critic that checks requirements and specs against product-context.md.
 
 **When it runs:** Phase 0b — ALWAYS runs (parallel with ADVOCATE/SKEPTIC) since product-context.md is mandatory.
@@ -267,3 +269,5 @@ The Product Skeptic runs IN PARALLEL with the existing ADVOCATE/SKEPTIC in Phase
 - **ADVOCATE/SKEPTIC** must not FAIL. If both FAIL, the spec must be fixed and all three re-run.
 
 See @ref/validator-templates.md "Resolution matrix" table for the full 3-agent consensus matrix.
+
+**Host-aligned entry:** see templates/ref/pdlc-goal.md for host /goal entry + pdlc-goal.md supplies PDLC rules + adapters (P1 Product Skeptic is mandatory here; classification + delegation to /loop for execution). All cross-refs updated per loop-simplification-v4 Phase 3.

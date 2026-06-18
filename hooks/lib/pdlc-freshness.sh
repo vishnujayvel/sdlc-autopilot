@@ -9,6 +9,10 @@
 #
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-freshness.sh"
 # Depends on: pdlc-state.sh (pdlc_get_field, pdlc_get_mtime)
+#
+# Host adapter / Ralph driver reuse:
+# Example: pdlc_freshness_report (FRESH/STALE/DRIFT)
+# (called in director prompts + context health for /goal + /loop)
 
 set -euo pipefail
 

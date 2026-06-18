@@ -9,6 +9,7 @@ PDLC Autopilot is a CLI skill for Claude Code that orchestrates autonomous produ
 ### Shell Scripts (hooks/)
 - All hook scripts MUST exit 0, even on error. Use `trap 'exit 0' ERR` (or `trap '...; exit 0' ERR` if output is needed).
 - Use `set -eo pipefail` at the top of hook scripts that have ERR traps (`-u` / nounset bypasses the ERR trap and breaks fail-open). Use `set -euo pipefail` in library scripts without ERR traps.
+- Use `local` **only inside function bodies**. Never use `local` in the main script body or inside loops/conditionals outside functions (macOS bash 3.2 fatal error).
 - Atomic writes: write to `.tmp` then `mv` to final path. Never write directly to state files.
 - HANDOFF.md uses flat YAML frontmatter (no nested objects). Parse with awk, not yq.
 - `pdlc_get_field` / `pdlc_set_field` in `hooks/lib/pdlc-state.sh` are the canonical state accessors. Do not reimplement frontmatter parsing inline.
@@ -62,3 +63,13 @@ PDLC Autopilot is a CLI skill for Claude Code that orchestrates autonomous produ
 - Alloy 6.2.0 (formal specification language) + Alloy Analyzer (SAT4J solver, bundled), Java 17+
 - Flat YAML in HANDOFF.md (via pdlc-state.sh), text file scanning
 - Claude CLI for LLM-driven Director reasoning steps
+
+## Loop Engineering (host adapters + portability, Phase 4 revival)
+PDLC uses host /goal /loop /Ralph (Spec Kit) for generic orchestration (goal decomposition, outer iteration, session resume, slash plumbing, plain dispatch). 
+PDLC provides:
+- Portable core: hooks/lib/* (pdlc-state, pdlc-director, pdlc-critic, pdlc-resource, pdlc-lifecycle, pdlc-session etc. — all observer-style, PDLC_* env driven, callable standalone for host reuse; see lib headers for "host adapter / Ralph driver" contract + examples).
+- pdlc-goal.md adapter (templates/ref/pdlc-goal.md): thin persistent goal file + PDLC success criteria (P0/P1 mandatory, sub-protocols, gates) + "use PDLC sub-protocols" + completion token (PDLC-DONE-VALIDATED after validator). Hosts load it for entry.
+- Reference driver: hooks/pdlc-outer-loop.sh (documented as Ralph-compatible example; thin loop over the libs + HANDOFF + resource guards + critic eval).
+Keep Ralph code out of product (never mix into hooks/, src/, templates/). 
+PDLC special (non-negotiable invariants, preserved across hosts): Product Skeptic (always Phase P1 parallel, 5 lenses + KILL independent), Dual-Critic (ADVOCATE + SKEPTIC consensus per batch/final; enables future decomp), file-group batching (one Actor + 2 Critics), full PDLC lifecycle (pdlc-lifecycle.sh + phases + gates), SpecGate/CriticGate/StopGuard enforcement, resource governance (#53), lightweight paths, retrospective/context health.
+See: openspec/changes/loop-simplification-v4/{design,proposal,tasks}.md , templates/grok/pdlc-grok-adapter.md , templates/cursor/pdlc-cursor-adapter.md , templates/ref/pdlc-goal.md .

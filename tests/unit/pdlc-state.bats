@@ -303,3 +303,135 @@ batch: 1" "Body text"
   run pdlc_delete_marker
   [[ "$status" -eq 0 ]]
 }
+
+# ──────────────────────────────────────────────────────────
+# pdlc_count_tasks
+# ──────────────────────────────────────────────────────────
+
+@test "pdlc_count_tasks: total count" {
+  local tasks_file="${TEST_WORK_DIR}/tasks.md"
+  cat > "$tasks_file" <<'EOF'
+- [ ] 1.1 First
+- [x] 1.2 Done
+- [ ] 2.1 Pending
+EOF
+  run pdlc_count_tasks "$tasks_file" "total"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "3" ]]
+}
+
+@test "pdlc_count_tasks: done count" {
+  local tasks_file="${TEST_WORK_DIR}/tasks.md"
+  cat > "$tasks_file" <<'EOF'
+- [ ] 1.1 First
+- [x] 1.2 Done
+- [ ] 2.1 Pending
+EOF
+  run pdlc_count_tasks "$tasks_file" "done"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "1" ]]
+}
+
+@test "pdlc_count_tasks: pending count" {
+  local tasks_file="${TEST_WORK_DIR}/tasks.md"
+  cat > "$tasks_file" <<'EOF'
+- [ ] 1.1 First
+- [x] 1.2 Done
+- [ ] 2.1 Pending
+EOF
+  run pdlc_count_tasks "$tasks_file" "pending"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "2" ]]
+}
+
+@test "pdlc_count_tasks: missing file returns 0" {
+  run pdlc_count_tasks "${TEST_WORK_DIR}/no-such-tasks.md" "total"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "0" ]]
+}
+
+@test "pdlc_count_tasks: empty file returns 0" {
+  local tasks_file="${TEST_WORK_DIR}/empty.md"
+  touch "$tasks_file"
+  run pdlc_count_tasks "$tasks_file" "total"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "0" ]]
+}
+
+# ──────────────────────────────────────────────────────────
+# pdlc_get_mtime
+# ──────────────────────────────────────────────────────────
+
+@test "pdlc_get_mtime: returns epoch for existing file" {
+  local f="${TEST_WORK_DIR}/tfile"
+  touch "$f"
+  run pdlc_get_mtime "$f"
+  [[ "$status" -eq 0 ]]
+  # epoch should be a number > 0 and look like seconds since epoch (rough check: >= 8 digits or non-empty numeric)
+  [[ -n "$output" ]]
+  [[ "$output" =~ ^[0-9]+$ ]]
+}
+
+@test "pdlc_get_mtime: returns empty for missing file" {
+  run pdlc_get_mtime "${TEST_WORK_DIR}/no-such-file"
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+}
+
+# ──────────────────────────────────────────────────────────
+# pdlc_epoch_to_date_str / pdlc_date_to_epoch / pdlc_get_spec_json_field
+# ──────────────────────────────────────────────────────────
+
+@test "pdlc_epoch_to_date_str: converts epoch to YYYY-MM-DD" {
+  local epoch
+  epoch=$(date -j -f "%Y-%m-%d" "2024-06-15" +%s 2>/dev/null || date -d "2024-06-15" +%s)
+  run pdlc_epoch_to_date_str "$epoch"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "2024-06-15" ]]
+}
+
+@test "pdlc_epoch_to_date_str: empty input returns empty" {
+  run pdlc_epoch_to_date_str ""
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+}
+
+@test "pdlc_date_to_epoch: converts YYYY-MM-DD to epoch" {
+  local expected
+  expected=$(date -j -f "%Y-%m-%d" "2024-06-15" +%s 2>/dev/null || date -d "2024-06-15" +%s)
+  run pdlc_date_to_epoch "2024-06-15"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "$expected" ]]
+}
+
+@test "pdlc_date_to_epoch: extracts date from ISO timestamp" {
+  local expected
+  expected=$(date -j -f "%Y-%m-%d" "2024-06-15" +%s 2>/dev/null || date -d "2024-06-15" +%s)
+  run pdlc_date_to_epoch "2024-06-15T14:30:00Z"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "$expected" ]]
+}
+
+@test "pdlc_date_to_epoch: garbage input returns empty (pipefail-safe)" {
+  run pdlc_date_to_epoch "not-a-date"
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+}
+
+@test "pdlc_get_spec_json_field: reads top-level field from spec.json" {
+  local spec_dir="${TEST_WORK_DIR}/spec"
+  mkdir -p "$spec_dir"
+  echo '{"active_workflow": "pdlc-autopilot", "phase": "implementing", "updated_at": "2024-06-15"}' > "${spec_dir}/spec.json"
+  run pdlc_get_spec_json_field "$spec_dir" "phase"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "implementing" ]]
+  run pdlc_get_spec_json_field "$spec_dir" "updated_at"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "2024-06-15" ]]
+}
+
+@test "pdlc_get_spec_json_field: missing spec.json returns empty" {
+  run pdlc_get_spec_json_field "${TEST_WORK_DIR}/no-spec" "phase"
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+}

@@ -6,6 +6,10 @@
 #
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-lifecycle.sh"
 # Depends on: pdlc-state.sh (pdlc_get_field, pdlc_set_field)
+#
+# Host adapter / Ralph driver reuse:
+# Example: pdlc_lifecycle_infer + pdlc_lifecycle_transition
+# (used in outer-loop + director for phase decisions)
 
 set -euo pipefail
 

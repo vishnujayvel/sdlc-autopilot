@@ -5,6 +5,10 @@
 # and action-required comments. Reports findings with file:line:type:match format.
 #
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-placeholder.sh"
+#
+# Host adapter / Ralph driver reuse:
+# Example: pdlc_placeholder_scan / pdlc_placeholder_check
+# (used in critic advocate + final validator)
 
 set -euo pipefail
 

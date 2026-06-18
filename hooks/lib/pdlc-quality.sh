@@ -4,6 +4,11 @@
 # Runs all quality checks (lifecycle, placeholder, cross-reference,
 # lint, semantic, and Product Skeptic) and produces a consolidated report.
 #
+# Host adapter / Ralph driver reuse:
+# Example call sequence for host /loop or Ralph driver:
+#   pdlc_quality_report
+#   (used in review + outer for portable core; Ralph/loop/Grok/Cursor reuse)
+#
 # Sourced by other scripts: source "$(dirname "$0")/lib/pdlc-quality.sh"
 
 set -euo pipefail

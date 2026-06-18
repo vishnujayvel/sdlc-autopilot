@@ -1,5 +1,7 @@
 # Lightweight Paths: Bug Fix & Iteration
 
+**See `templates/ref/pdlc-goal.md` for host-aligned entry.** Bug Fix / Iteration paths (classification + lightweight protocols) are PDLC special and retained in slim SKILL + pdlc-goal.md payload. Host /goal classifies and delegates execution loop; these rules (B1-B4, I1-I4, state via tasks) apply for PDLC context regardless of host (pdlc-outer-loop ref or Ralph). 
+
 **Why:** Full PDLC ceremony (P0 → specs → build → validate) is overkill for fixing a bug or adding a config flag. These paths preserve rigor with less overhead.
 
 **Stickiness gate:** Lightweight paths ONLY activate when user explicitly invokes PDLC context. "PDLC bug fix", "fix this using the PDLC process", "iterate on this feature using PDLC". Plain "fix this bug" is a NON-trigger — it stays in normal Claude Code mode.
@@ -242,3 +244,5 @@ This replaces file-based tracking for lightweight cycles. Progress.md is still u
 | **Visualization** | Compact box | Medium box | Full pipeline |
 | **Target duration** | Minutes | ~30 min | Hours to days |
 | **Fix cycles** | Max 1 | Max 2 | Max 2 per batch |
+
+**Host-aligned entry note (Phase 3):** Classification (Bug Fix / Iteration / Full) also lives in pdlc-goal.md. For new PDLC work prefer host /goal with pdlc-goal.md (provides router + P0/P1 + SpecGate + delegation to /loop or pdlc-outer-loop reference). see pdlc-goal.md for host-aligned entry. Lightweight paths preserved verbatim for PDLC special.
